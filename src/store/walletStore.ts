@@ -77,10 +77,10 @@ const bytesToHex = (bytes: Uint8Array): string => {
 
 const generateMnemonic = (): string => {
   try {
-    // Generate random bytes for entropy
-    const randomBytes = nacl.randomBytes(16);
-    // Convert to hex string for bip39
-    const entropyHex = bytesToHex(randomBytes);
+    // Generate random bytes for entropy (16 bytes = 128 bits for 12-word phrase)
+    const entropy = nacl.randomBytes(16);
+    // Convert to hex string which bip39 can use
+    const entropyHex = bytesToHex(entropy);
     return bip39.entropyToMnemonic(entropyHex);
   } catch (error) {
     console.error('Failed to generate mnemonic:', error);
@@ -94,7 +94,7 @@ const validateMnemonic = (mnemonic: string): boolean => {
 
 const getKeypairFromMnemonic = (mnemonic: string): Keypair => {
   try {
-    // Convert mnemonic to seed bytes
+    // Convert mnemonic to seed (returns Uint8Array compatible with ed25519)
     const seed = bip39.mnemonicToSeedSync(mnemonic);
     // Derive path for Solana
     const derivedSeed = derivePath("m/44'/501'/0'/0'", seed.toString('hex')).key;
