@@ -1,3 +1,4 @@
+
 import { create } from 'zustand';
 import { Connection, PublicKey, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js';
 import * as bip39 from 'bip39';
@@ -51,18 +52,57 @@ export interface WalletState {
   setCurrentView: (view: WalletState['currentView']) => void;
 }
 
-// Helper function to generate mnemonic without using Buffer directly
+// Completely browser-compatible mnemonic generation
 const generateMnemonic = (): string => {
-  // Create a Uint8Array of 16 random bytes (for 12 words)
-  const entropy = new Uint8Array(16);
-  window.crypto.getRandomValues(entropy);
-  
-  // Convert to hex string (bip39 can work with hex strings)
-  const entropyHex = Array.from(entropy)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-  
-  return bip39.entropyToMnemonic(entropyHex);
+  try {
+    // Use crypto.getRandomValues which is browser-compatible
+    const entropy = new Uint8Array(16); // 16 bytes = 128 bits for 12-word mnemonic
+    window.crypto.getRandomValues(entropy);
+    
+    // Convert to hex string
+    const entropyHex = Array.from(entropy)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    
+    // We'll use a modified approach that doesn't directly use bip39.entropyToMnemonic
+    // Instead, we'll use a hardcoded list of BIP39 words
+    const wordlist = bip39.wordlists.english;
+    
+    // Calculate checksum
+    const sha256Hash = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(entropyHex)).toString();
+    const checksumBits = parseInt(sha256Hash[0], 16).toString(2).padStart(4, '0');
+    
+    // Convert entropy + checksum to mnemonic words
+    const bits = entropyHex.split('').map(c => parseInt(c, 16).toString(2).padStart(4, '0')).join('') + checksumBits;
+    const chunks = bits.match(/(.{1,11})/g) || [];
+    
+    // Map each 11-bit chunk to a word from the wordlist
+    const words = chunks.map(binary => {
+      const index = parseInt(binary, 2);
+      return wordlist[index];
+    });
+    
+    return words.join(' ');
+  } catch (error) {
+    console.error('Failed to generate mnemonic:', error);
+    throw new Error('Failed to generate mnemonic');
+  }
+};
+
+// Utility function to validate mnemonic without using Buffer
+const validateMnemonic = (mnemonic: string): boolean => {
+  try {
+    const words = mnemonic.split(' ');
+    // Check basic validation - word count and all words in wordlist
+    if (words.length !== 12 && words.length !== 24) {
+      return false;
+    }
+    
+    const wordlist = bip39.wordlists.english;
+    return words.every(word => wordlist.includes(word));
+  } catch (error) {
+    return false;
+  }
 };
 
 // Create the store
@@ -95,7 +135,7 @@ const useWalletStore = create<WalletState>((set, get) => ({
   createWallet: async (password) => {
     set({ isLoading: true, error: null });
     try {
-      // Generate mnemonic using our helper function
+      // Generate mnemonic using our browser-compatible function
       const mnemonic = generateMnemonic();
       
       // Encrypt the mnemonic with the password
@@ -133,8 +173,8 @@ const useWalletStore = create<WalletState>((set, get) => ({
   importWallet: async (mnemonic, password) => {
     set({ isLoading: true, error: null });
     try {
-      // Validate mnemonic
-      if (!bip39.validateMnemonic(mnemonic)) {
+      // Validate mnemonic using our browser-compatible function
+      if (!validateMnemonic(mnemonic)) {
         throw new Error('Invalid mnemonic phrase');
       }
       
@@ -183,7 +223,7 @@ const useWalletStore = create<WalletState>((set, get) => ({
       const bytes = CryptoJS.AES.decrypt(encryptedMnemonic, password);
       const mnemonic = bytes.toString(CryptoJS.enc.Utf8);
       
-      if (!mnemonic || !bip39.validateMnemonic(mnemonic)) {
+      if (!mnemonic || !validateMnemonic(mnemonic)) {
         throw new Error('Invalid password');
       }
       
