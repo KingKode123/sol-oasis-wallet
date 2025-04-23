@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import useWalletStore from '@/store/walletStore';
 
 const CreateWallet: React.FC = () => {
@@ -44,6 +44,7 @@ const CreateWallet: React.FC = () => {
         description: "Your new wallet is ready to use.",
       });
     } catch (err) {
+      console.error('Error in component:', err);
       toast({
         title: "Error creating wallet",
         description: error || "An unknown error occurred",

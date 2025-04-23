@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { Connection, PublicKey, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js';
 import * as bip39 from 'bip39';
@@ -52,6 +51,20 @@ export interface WalletState {
   setCurrentView: (view: WalletState['currentView']) => void;
 }
 
+// Helper function to generate mnemonic without using Buffer directly
+const generateMnemonic = (): string => {
+  // Create a Uint8Array of 16 random bytes (for 12 words)
+  const entropy = new Uint8Array(16);
+  window.crypto.getRandomValues(entropy);
+  
+  // Convert to hex string (bip39 can work with hex strings)
+  const entropyHex = Array.from(entropy)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  
+  return bip39.entropyToMnemonic(entropyHex);
+};
+
 // Create the store
 const useWalletStore = create<WalletState>((set, get) => ({
   // Initial state
@@ -82,15 +95,11 @@ const useWalletStore = create<WalletState>((set, get) => ({
   createWallet: async (password) => {
     set({ isLoading: true, error: null });
     try {
-      // Generate mnemonic
-      const mnemonic = bip39.generateMnemonic(128); // 12 words
+      // Generate mnemonic using our helper function
+      const mnemonic = generateMnemonic();
       
       // Encrypt the mnemonic with the password
       const encryptedMnemonic = CryptoJS.AES.encrypt(mnemonic, password).toString();
-      
-      // In a full implementation, we would derive keypair from mnemonic
-      // For now, we'll just store the mnemonic and public key
-      // We need to implement proper keypair derivation
       
       // Simulating keypair for now - to be replaced with proper derivation
       const keypairSeed = CryptoJS.SHA256(mnemonic).toString();
@@ -113,7 +122,11 @@ const useWalletStore = create<WalletState>((set, get) => ({
       await get().fetchSolBalance();
     } catch (error) {
       console.error('Error creating wallet:', error);
-      set({ error: 'Failed to create wallet', isLoading: false });
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to create wallet', 
+        isLoading: false 
+      });
+      throw error; // Rethrow to handle in the UI
     }
   },
   
@@ -153,6 +166,7 @@ const useWalletStore = create<WalletState>((set, get) => ({
         error: error instanceof Error ? error.message : 'Failed to import wallet', 
         isLoading: false 
       });
+      throw error; // Rethrow to handle in the UI
     }
   },
   
