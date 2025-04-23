@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,17 +37,19 @@ const CreateWallet: React.FC = () => {
     setShowError('');
     
     try {
+      console.log('Creating wallet...');
       await createWallet(password);
+      console.log('Wallet creation completed');
       toast({
         title: "Wallet created successfully!",
         description: "Please backup your recovery phrase on the next screen.",
       });
     } catch (err) {
       console.error('Error in component:', err);
-      setShowError(error || "An unknown error occurred");
+      setShowError(err instanceof Error ? err.message : "An unknown error occurred");
       toast({
         title: "Error creating wallet",
-        description: error || "An unknown error occurred",
+        description: err instanceof Error ? err.message : "An unknown error occurred",
         variant: "destructive"
       });
     }

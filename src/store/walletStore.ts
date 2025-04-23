@@ -1,3 +1,4 @@
+
 import { create } from 'zustand';
 import { 
   Connection, 
@@ -76,14 +77,16 @@ export interface WalletState {
 // Completely browser-compatible mnemonic generation
 const generateMnemonic = (): string => {
   try {
-    // Use crypto.getRandomValues which is browser-compatible
-    const entropy = new Uint8Array(16); // 16 bytes = 128 bits for 12-word mnemonic
+    // Generate random bytes for entropy
+    const entropy = new Uint8Array(16);
     window.crypto.getRandomValues(entropy);
     
-    // Generate mnemonic directly using bip39
-    return bip39.entropyToMnemonic(Array.from(entropy)
+    // Convert to hex string
+    const entropyHex = Array.from(entropy)
       .map(b => b.toString(16).padStart(2, '0'))
-      .join(''));
+      .join('');
+      
+    return bip39.entropyToMnemonic(entropyHex);
   } catch (error) {
     console.error('Failed to generate mnemonic:', error);
     throw new Error('Failed to generate mnemonic');
@@ -95,17 +98,17 @@ const validateMnemonic = (mnemonic: string): boolean => {
   return bip39.validateMnemonic(mnemonic);
 };
 
-// Function to derive keypair from mnemonic - FIXED IMPLEMENTATION
+// Function to derive keypair from mnemonic
 const getKeypairFromMnemonic = (mnemonic: string): Keypair => {
   try {
     // Generate seed from mnemonic
     const seed = bip39.mnemonicToSeedSync(mnemonic);
     
-    // Use derivePath from ed25519-hd-key
+    // Use derivePath from ed25519-hd-key to derive the seed properly
     const derivedSeed = derivePath("m/44'/501'/0'/0'", seed.toString('hex')).key;
     
     // Create keypair from derived seed
-    return Keypair.fromSeed(Uint8Array.from(derivedSeed));
+    return Keypair.fromSeed(new Uint8Array(derivedSeed.slice(0, 32)));
   } catch (error) {
     console.error('Failed to derive keypair:', error);
     throw new Error('Failed to derive keypair from mnemonic');
@@ -147,15 +150,19 @@ const useWalletStore = create<WalletState>((set, get) => ({
   createWallet: async (password) => {
     set({ isLoading: true, error: null });
     try {
-      // Generate mnemonic using our browser-compatible function
+      console.log('Starting wallet creation process...');
+      
+      // Generate mnemonic
       const mnemonic = generateMnemonic();
+      console.log('Mnemonic generated successfully');
       
       // Encrypt the mnemonic with the password
       const encryptedMnemonic = CryptoJS.AES.encrypt(mnemonic, password).toString();
       
-      // Generate a real keypair from the mnemonic
+      // Generate keypair from the mnemonic
       const keypair = getKeypairFromMnemonic(mnemonic);
       const publicKey = keypair.publicKey.toBase58();
+      console.log('Keypair created successfully with public key:', publicKey);
       
       // Set state
       set({
