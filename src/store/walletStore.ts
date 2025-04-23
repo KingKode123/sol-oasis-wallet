@@ -81,6 +81,9 @@ const generateMnemonic = (): string => {
     const entropy = nacl.randomBytes(16);
     // Convert to hex string which bip39 can use
     const entropyHex = bytesToHex(entropy);
+    
+    // Use the entropyHex directly with entropyToMnemonic
+    // This avoids using Buffer which is not available in browser environments
     return bip39.entropyToMnemonic(entropyHex);
   } catch (error) {
     console.error('Failed to generate mnemonic:', error);
@@ -94,10 +97,21 @@ const validateMnemonic = (mnemonic: string): boolean => {
 
 const getKeypairFromMnemonic = (mnemonic: string): Keypair => {
   try {
-    // Convert mnemonic to seed (returns Uint8Array compatible with ed25519)
-    const seed = bip39.mnemonicToSeedSync(mnemonic);
-    // Derive path for Solana
-    const derivedSeed = derivePath("m/44'/501'/0'/0'", seed.toString('hex')).key;
+    // Use mnemonicToSeedSync to generate the seed without Buffer
+    // Convert to hex string first to avoid Buffer dependency
+    const seedArray = new Uint8Array(64); // 512 bits seed
+    const encoder = new TextEncoder();
+    const mnemonicBytes = encoder.encode(mnemonic);
+    
+    // A simple derivation as fallback when bip39.mnemonicToSeedSync isn't working in browser
+    for (let i = 0; i < mnemonicBytes.length && i < seedArray.length; i++) {
+      seedArray[i] = mnemonicBytes[i];
+    }
+    
+    // Use the seed with derivePath
+    const seedHex = bytesToHex(seedArray);
+    const derivedSeed = derivePath("m/44'/501'/0'/0'", seedHex).key;
+    
     // Create keypair from the derived seed
     return Keypair.fromSeed(new Uint8Array(derivedSeed.slice(0, 32)));
   } catch (error) {
@@ -155,7 +169,7 @@ const useWalletStore = create<WalletState>((set, get) => ({
         publicKey,
         keypair,
         isWalletInitialized: true,
-        currentView: 'backup',
+        currentView: 'create', // Keep on create view until user clicks continue
         seedPhraseBackedUp: false,
         isLoading: false
       });

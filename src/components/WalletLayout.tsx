@@ -1,10 +1,16 @@
+
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Wallet, Send, ArrowDown, Settings, List } from 'lucide-react';
 import useWalletStore from '@/store/walletStore';
 
-const WalletLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentView, setCurrentView, signOut, isWalletInitialized } = useWalletStore();
+interface WalletLayoutProps {
+  children: React.ReactNode;
+  showNavigation?: boolean;
+}
+
+const WalletLayout: React.FC<WalletLayoutProps> = ({ children, showNavigation = false }) => {
+  const { currentView, setCurrentView, signOut } = useWalletStore();
   
   return (
     <div className="w-full max-w-md mx-auto min-h-screen flex flex-col bg-background">
@@ -16,7 +22,7 @@ const WalletLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
             <h1 className="text-xl font-bold solana-gradient-text">SOL Oasis</h1>
           </div>
           
-          {isWalletInitialized && (
+          {showNavigation && (
             <div>
               <Button
                 variant="ghost"
@@ -36,7 +42,7 @@ const WalletLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       </main>
       
       {/* Bottom navigation if logged in */}
-      {isWalletInitialized && (
+      {showNavigation && (
         <nav className="border-t p-2 bg-card">
           <div className="flex justify-around">
             <Button

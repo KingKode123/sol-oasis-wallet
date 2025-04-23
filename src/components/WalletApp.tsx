@@ -13,26 +13,29 @@ import TransactionsView from './TransactionsView';
 import useWalletStore from '@/store/walletStore';
 
 const WalletApp: React.FC = () => {
-  const { currentView, isWalletInitialized, seedPhraseBackedUp } = useWalletStore();
+  const { currentView, isWalletInitialized, seedPhraseBackedUp, publicKey } = useWalletStore();
   
-  // Check for existing wallet on load
+  // Check for existing wallet on load, but don't set isWalletInitialized yet
+  // We will require proper unlocking first
   useEffect(() => {
     const encryptedMnemonic = localStorage.getItem('soloasisWallet');
     if (encryptedMnemonic) {
       useWalletStore.setState({ 
         encryptedMnemonic,
-        isWalletInitialized: true
+        // We set currentView to welcome to force login, but don't set isWalletInitialized yet
+        currentView: 'welcome'
       });
     }
   }, []);
   
+  // Determine if the wallet is fully set up - requires publicKey to be present
+  const walletFullyInitialized = isWalletInitialized && publicKey;
+  
   const renderContent = () => {
-    // If wallet is initialized but seed phrase isn't backed up, and the user manually navigated to the backup view
     if (isWalletInitialized && !seedPhraseBackedUp && currentView === 'backup') {
       return <BackupView />;
     }
     
-    // Otherwise show the appropriate view
     switch (currentView) {
       case 'welcome':
         return <WelcomeScreen />;
@@ -58,7 +61,7 @@ const WalletApp: React.FC = () => {
   };
   
   return (
-    <WalletLayout>
+    <WalletLayout showNavigation={walletFullyInitialized}>
       {renderContent()}
     </WalletLayout>
   );
