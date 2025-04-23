@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { 
   Connection, 
@@ -18,7 +17,6 @@ import { derivePath } from 'ed25519-hd-key';
 export type NetworkType = 'devnet' | 'testnet' | 'mainnet-beta';
 
 export interface WalletState {
-  // Wallet and connection
   mnemonic: string | null;
   publicKey: string | null;
   keypair: Keypair | null;
@@ -27,11 +25,9 @@ export interface WalletState {
   network: NetworkType;
   connection: Connection;
   
-  // Seed phrase backup
   seedPhraseBackedUp: boolean;
   showSeedPhrase: boolean;
   
-  // Balances
   solBalance: number;
   tokenBalances: Array<{
     mint: string;
@@ -40,7 +36,6 @@ export interface WalletState {
     decimals: number;
   }>;
   
-  // Transactions
   transactions: Array<{
     signature: string;
     timestamp: number;
@@ -53,12 +48,10 @@ export interface WalletState {
   }>;
   isLoadingTransactions: boolean;
   
-  // UI state
   isLoading: boolean;
   currentView: 'welcome' | 'create' | 'import' | 'dashboard' | 'send' | 'receive' | 'settings' | 'transactions' | 'backup';
   error: string | null;
   
-  // Methods
   setNetwork: (network: NetworkType) => void;
   createWallet: (password: string) => Promise<void>;
   importWallet: (mnemonic: string, password: string) => Promise<void>;
@@ -74,50 +67,33 @@ export interface WalletState {
   getExplorerUrl: (signature: string) => string;
 }
 
-// Completely browser-compatible mnemonic generation
 const generateMnemonic = (): string => {
   try {
-    // Generate random bytes for entropy
-    const entropy = new Uint8Array(16);
-    window.crypto.getRandomValues(entropy);
-    
-    // Convert to hex string
-    const entropyHex = Array.from(entropy)
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-      
+    const randomBytes = nacl.randomBytes(16);
+    const entropyHex = Buffer.from(randomBytes).toString('hex');
     return bip39.entropyToMnemonic(entropyHex);
   } catch (error) {
     console.error('Failed to generate mnemonic:', error);
-    throw new Error('Failed to generate mnemonic');
+    throw new Error('Failed to generate mnemonic: ' + (error instanceof Error ? error.message : String(error)));
   }
 };
 
-// Utility function to validate mnemonic
 const validateMnemonic = (mnemonic: string): boolean => {
   return bip39.validateMnemonic(mnemonic);
 };
 
-// Function to derive keypair from mnemonic
 const getKeypairFromMnemonic = (mnemonic: string): Keypair => {
   try {
-    // Generate seed from mnemonic
     const seed = bip39.mnemonicToSeedSync(mnemonic);
-    
-    // Use derivePath from ed25519-hd-key to derive the seed properly
     const derivedSeed = derivePath("m/44'/501'/0'/0'", seed.toString('hex')).key;
-    
-    // Create keypair from derived seed
-    return Keypair.fromSeed(new Uint8Array(derivedSeed.slice(0, 32)));
+    return Keypair.fromSeed(Uint8Array.from(derivedSeed.slice(0, 32)));
   } catch (error) {
     console.error('Failed to derive keypair:', error);
-    throw new Error('Failed to derive keypair from mnemonic');
+    throw new Error('Failed to derive keypair from mnemonic: ' + (error instanceof Error ? error.message : String(error)));
   }
 };
 
-// Create the store
 const useWalletStore = create<WalletState>((set, get) => ({
-  // Initial state
   mnemonic: null,
   publicKey: null,
   keypair: null,
@@ -139,7 +115,6 @@ const useWalletStore = create<WalletState>((set, get) => ({
   currentView: 'welcome',
   error: null,
   
-  // Methods
   setNetwork: (network) => {
     const connection = new Connection(clusterApiUrl(network), 'confirmed');
     set({ network, connection });
@@ -152,34 +127,28 @@ const useWalletStore = create<WalletState>((set, get) => ({
     try {
       console.log('Starting wallet creation process...');
       
-      // Generate mnemonic
       const mnemonic = generateMnemonic();
-      console.log('Mnemonic generated successfully');
+      console.log('Mnemonic generated successfully:', mnemonic.split(' ').length + ' words');
       
-      // Encrypt the mnemonic with the password
       const encryptedMnemonic = CryptoJS.AES.encrypt(mnemonic, password).toString();
       
-      // Generate keypair from the mnemonic
       const keypair = getKeypairFromMnemonic(mnemonic);
       const publicKey = keypair.publicKey.toBase58();
       console.log('Keypair created successfully with public key:', publicKey);
       
-      // Set state
       set({
         mnemonic,
         encryptedMnemonic,
         publicKey,
         keypair,
         isWalletInitialized: true,
-        currentView: 'backup', // Changed from dashboard to backup
+        currentView: 'backup',
         seedPhraseBackedUp: false,
         isLoading: false
       });
       
-      // Save encrypted mnemonic to localStorage
       localStorage.setItem('soloasisWallet', encryptedMnemonic);
       
-      // Fetch balance
       await get().fetchSolBalance();
     } catch (error) {
       console.error('Error creating wallet:', error);
@@ -187,26 +156,22 @@ const useWalletStore = create<WalletState>((set, get) => ({
         error: error instanceof Error ? error.message : 'Failed to create wallet', 
         isLoading: false 
       });
-      throw error; // Rethrow to handle in the UI
+      throw error;
     }
   },
   
   importWallet: async (mnemonic, password) => {
     set({ isLoading: true, error: null });
     try {
-      // Validate mnemonic using our browser-compatible function
       if (!validateMnemonic(mnemonic)) {
         throw new Error('Invalid mnemonic phrase');
       }
       
-      // Encrypt the mnemonic with the password
       const encryptedMnemonic = CryptoJS.AES.encrypt(mnemonic, password).toString();
       
-      // Generate a real keypair from the mnemonic
       const keypair = getKeypairFromMnemonic(mnemonic);
       const publicKey = keypair.publicKey.toBase58();
       
-      // Set state
       set({
         mnemonic,
         encryptedMnemonic,
@@ -214,14 +179,12 @@ const useWalletStore = create<WalletState>((set, get) => ({
         keypair,
         isWalletInitialized: true,
         currentView: 'dashboard',
-        seedPhraseBackedUp: true,  // Assuming user knows their mnemonic when importing
+        seedPhraseBackedUp: true,
         isLoading: false
       });
       
-      // Save encrypted mnemonic to localStorage
       localStorage.setItem('soloasisWallet', encryptedMnemonic);
       
-      // Fetch balance and transactions
       await get().fetchSolBalance();
       await get().fetchTransactionHistory();
     } catch (error) {
@@ -230,7 +193,7 @@ const useWalletStore = create<WalletState>((set, get) => ({
         error: error instanceof Error ? error.message : 'Failed to import wallet', 
         isLoading: false 
       });
-      throw error; // Rethrow to handle in the UI
+      throw error;
     }
   },
   
@@ -243,7 +206,6 @@ const useWalletStore = create<WalletState>((set, get) => ({
         throw new Error('No wallet found');
       }
       
-      // Decrypt the mnemonic with the password
       const bytes = CryptoJS.AES.decrypt(encryptedMnemonic, password);
       const mnemonic = bytes.toString(CryptoJS.enc.Utf8);
       
@@ -251,11 +213,9 @@ const useWalletStore = create<WalletState>((set, get) => ({
         throw new Error('Invalid password');
       }
       
-      // Generate a real keypair from the mnemonic
       const keypair = getKeypairFromMnemonic(mnemonic);
       const publicKey = keypair.publicKey.toBase58();
       
-      // Set state
       set({
         mnemonic,
         encryptedMnemonic,
@@ -266,7 +226,6 @@ const useWalletStore = create<WalletState>((set, get) => ({
         isLoading: false
       });
       
-      // Fetch balance and transactions
       await get().fetchSolBalance();
       await get().fetchTransactionHistory();
       
@@ -299,7 +258,6 @@ const useWalletStore = create<WalletState>((set, get) => ({
     if (!publicKey) return;
     
     try {
-      // This is a real balance fetch using the Solana connection
       const balance = await connection.getBalance(new PublicKey(publicKey));
       set({ solBalance: balance / LAMPORTS_PER_SOL });
     } catch (error) {
@@ -315,11 +273,9 @@ const useWalletStore = create<WalletState>((set, get) => ({
     set({ isLoadingTransactions: true });
     
     try {
-      // Fetch transaction signatures for the account
       const pubKey = new PublicKey(publicKey);
       const signatures = await connection.getSignaturesForAddress(pubKey, { limit: 10 });
       
-      // Process each transaction to get details
       const transactionDetails = await Promise.all(
         signatures.map(async (sig) => {
           try {
@@ -327,10 +283,8 @@ const useWalletStore = create<WalletState>((set, get) => ({
             
             if (!tx || !tx.meta) return null;
             
-            // Determine if this account is sender or receiver
             const isReceiver = tx.transaction.message.accountKeys[0].toString() !== pubKey.toString();
             
-            // Calculate amount (simplified - assumes simple SOL transfers)
             const amount = Math.abs(tx.meta.postBalances[0] - tx.meta.preBalances[0]) / LAMPORTS_PER_SOL;
             
             return {
@@ -349,7 +303,6 @@ const useWalletStore = create<WalletState>((set, get) => ({
         })
       );
       
-      // Filter out null values and set to state
       const validTransactions = transactionDetails.filter(tx => tx !== null) as WalletState['transactions'];
       set({ transactions: validTransactions, isLoadingTransactions: false });
     } catch (error) {
@@ -369,7 +322,6 @@ const useWalletStore = create<WalletState>((set, get) => ({
       const recipientPubkey = new PublicKey(recipient);
       const lamports = amount * LAMPORTS_PER_SOL;
       
-      // Create a simple transaction
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: keypair.publicKey,
@@ -378,22 +330,18 @@ const useWalletStore = create<WalletState>((set, get) => ({
         })
       );
       
-      // Add memo if provided
       if (memo) {
         // This would require memo program, simplified for now
       }
       
-      // Send the transaction
       const signature = await connection.sendTransaction(transaction, [keypair]);
       
-      // Wait for confirmation
       const confirmation = await connection.confirmTransaction(signature);
       
       if (confirmation.value.err) {
         throw new Error('Transaction failed to confirm');
       }
       
-      // Add to local transaction history
       const newTransaction = {
         signature,
         timestamp: Date.now(),
@@ -408,7 +356,6 @@ const useWalletStore = create<WalletState>((set, get) => ({
         transactions: [newTransaction, ...state.transactions]
       }));
       
-      // Refresh balance
       await get().fetchSolBalance();
       
       return signature;
