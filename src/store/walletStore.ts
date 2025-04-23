@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { 
   Connection, 
@@ -12,7 +11,7 @@ import {
 } from '@solana/web3.js';
 import * as bip39 from 'bip39';
 import CryptoJS from 'crypto-js';
-import { nacl } from 'tweetnacl';
+import * as nacl from 'tweetnacl';
 import { derivePath } from 'ed25519-hd-key';
 
 export type NetworkType = 'devnet' | 'testnet' | 'mainnet-beta';
