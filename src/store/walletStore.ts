@@ -1,3 +1,4 @@
+
 import { create } from 'zustand';
 import { 
   Connection, 
@@ -67,10 +68,19 @@ export interface WalletState {
   getExplorerUrl: (signature: string) => string;
 }
 
+// Utility function to convert Uint8Array to hex string
+const bytesToHex = (bytes: Uint8Array): string => {
+  return Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+};
+
 const generateMnemonic = (): string => {
   try {
+    // Generate random bytes for entropy
     const randomBytes = nacl.randomBytes(16);
-    const entropyHex = Buffer.from(randomBytes).toString('hex');
+    // Convert to hex string for bip39
+    const entropyHex = bytesToHex(randomBytes);
     return bip39.entropyToMnemonic(entropyHex);
   } catch (error) {
     console.error('Failed to generate mnemonic:', error);
@@ -84,9 +94,12 @@ const validateMnemonic = (mnemonic: string): boolean => {
 
 const getKeypairFromMnemonic = (mnemonic: string): Keypair => {
   try {
+    // Convert mnemonic to seed bytes
     const seed = bip39.mnemonicToSeedSync(mnemonic);
+    // Derive path for Solana
     const derivedSeed = derivePath("m/44'/501'/0'/0'", seed.toString('hex')).key;
-    return Keypair.fromSeed(Uint8Array.from(derivedSeed.slice(0, 32)));
+    // Create keypair from the derived seed
+    return Keypair.fromSeed(new Uint8Array(derivedSeed.slice(0, 32)));
   } catch (error) {
     console.error('Failed to derive keypair:', error);
     throw new Error('Failed to derive keypair from mnemonic: ' + (error instanceof Error ? error.message : String(error)));

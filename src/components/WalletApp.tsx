@@ -27,8 +27,8 @@ const WalletApp: React.FC = () => {
   }, []);
   
   const renderContent = () => {
-    // If wallet is initialized but seed phrase isn't backed up, always show backup view
-    if (isWalletInitialized && !seedPhraseBackedUp && currentView !== 'backup') {
+    // If wallet is initialized but seed phrase isn't backed up, and the user manually navigated to the backup view
+    if (isWalletInitialized && !seedPhraseBackedUp && currentView === 'backup') {
       return <BackupView />;
     }
     

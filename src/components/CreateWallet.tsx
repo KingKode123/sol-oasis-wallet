@@ -10,13 +10,14 @@ import { useToast } from '@/hooks/use-toast';
 import useWalletStore from '@/store/walletStore';
 
 const CreateWallet: React.FC = () => {
-  const { createWallet, error, isLoading } = useWalletStore();
+  const { createWallet, error, isLoading, setCurrentView } = useWalletStore();
   const { toast } = useToast();
   
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showError, setShowError] = useState('');
+  const [walletCreated, setWalletCreated] = useState(false);
   
   const handleCreate = async () => {
     // Validate inputs
@@ -41,6 +42,7 @@ const CreateWallet: React.FC = () => {
       console.log('Creating wallet...');
       await createWallet(password);
       console.log('Wallet creation completed');
+      setWalletCreated(true);
       toast({
         title: "Wallet created successfully!",
         description: "Please backup your recovery phrase on the next screen.",
@@ -55,6 +57,10 @@ const CreateWallet: React.FC = () => {
         variant: "destructive"
       });
     }
+  };
+  
+  const handleContinue = () => {
+    setCurrentView('backup');
   };
   
   return (
@@ -82,6 +88,7 @@ const CreateWallet: React.FC = () => {
               placeholder="Enter a secure password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              disabled={walletCreated}
             />
           </div>
           
@@ -93,6 +100,7 @@ const CreateWallet: React.FC = () => {
               placeholder="Confirm your password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              disabled={walletCreated}
             />
           </div>
           
@@ -101,6 +109,7 @@ const CreateWallet: React.FC = () => {
               id="terms" 
               checked={termsAccepted}
               onCheckedChange={(checked) => setTermsAccepted(checked === true)}
+              disabled={walletCreated}
             />
             <Label htmlFor="terms" className="text-sm">
               I understand that I am responsible for storing my password securely
@@ -109,13 +118,22 @@ const CreateWallet: React.FC = () => {
         </CardContent>
         
         <CardFooter className="flex flex-col space-y-3">
-          <Button 
-            className="w-full" 
-            onClick={handleCreate}
-            disabled={isLoading}
-          >
-            {isLoading ? 'Creating...' : 'Create Wallet'}
-          </Button>
+          {!walletCreated ? (
+            <Button 
+              className="w-full" 
+              onClick={handleCreate}
+              disabled={isLoading}
+            >
+              {isLoading ? 'Creating...' : 'Create Wallet'}
+            </Button>
+          ) : (
+            <Button 
+              className="w-full" 
+              onClick={handleContinue}
+            >
+              Continue to Backup
+            </Button>
+          )}
           
           <Button 
             variant="outline" 
