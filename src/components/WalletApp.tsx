@@ -29,7 +29,7 @@ const WalletApp: React.FC = () => {
   }, []);
   
   // Determine if the wallet is fully set up - requires publicKey to be present
-  const walletFullyInitialized = isWalletInitialized && publicKey;
+  const walletFullyInitialized = Boolean(isWalletInitialized && publicKey);
   
   const renderContent = () => {
     if (isWalletInitialized && !seedPhraseBackedUp && currentView === 'backup') {
