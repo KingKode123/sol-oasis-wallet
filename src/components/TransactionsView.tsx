@@ -1,40 +1,32 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Send, ArrowDown } from 'lucide-react';
+import { Send, ArrowDown, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import useWalletStore from '@/store/walletStore';
 
 const TransactionsView: React.FC = () => {
-  // In a real implementation, we would fetch transaction history from the blockchain
-  // For demo purposes, we'll create some example transactions
-  const exampleTransactions = [
-    {
-      signature: 'xyz123',
-      timestamp: Date.now() - 1000 * 60 * 30, // 30 minutes ago
-      amount: 0.05,
-      type: 'receive' as const,
-      from: '8gLCe...7Uj4K',
-    },
-    {
-      signature: 'abc456',
-      timestamp: Date.now() - 1000 * 60 * 60 * 2, // 2 hours ago
-      amount: 0.1,
-      type: 'send' as const,
-      to: '3eRTm...9qLz2',
-    },
-    {
-      signature: 'def789',
-      timestamp: Date.now() - 1000 * 60 * 60 * 24, // 1 day ago
-      amount: 0.02,
-      type: 'receive' as const,
-      from: '5tYpQ...2vF8W',
-    },
-  ];
+  const { 
+    transactions, 
+    fetchTransactionHistory, 
+    isLoadingTransactions,
+    publicKey,
+    getExplorerUrl
+  } = useWalletStore();
+
+  useEffect(() => {
+    fetchTransactionHistory();
+  }, [fetchTransactionHistory]);
   
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
     return date.toLocaleString();
+  };
+
+  const handleOpenExplorer = (signature: string) => {
+    const url = getExplorerUrl(signature);
+    window.open(url, '_blank');
   };
   
   return (
@@ -43,14 +35,28 @@ const TransactionsView: React.FC = () => {
         <h2 className="text-xl font-bold">Transaction History</h2>
       </div>
       
+      <div className="flex justify-between items-center">
+        <p className="text-sm text-muted-foreground">
+          {publicKey && `Showing transactions for ${publicKey.substring(0, 4)}...${publicKey.substring(publicKey.length - 4)}`}
+        </p>
+        <Button variant="outline" size="sm" onClick={() => fetchTransactionHistory()} disabled={isLoadingTransactions}>
+          <RefreshCw className={`h-4 w-4 mr-1 ${isLoadingTransactions ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      </div>
+      
       <Card>
         <CardHeader>
           <CardTitle>Recent Transactions</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {exampleTransactions.length > 0 ? (
+          {isLoadingTransactions ? (
+            <div className="text-center py-8">
+              <p>Loading transactions...</p>
+            </div>
+          ) : transactions.length > 0 ? (
             <div className="divide-y">
-              {exampleTransactions.map((tx, index) => (
+              {transactions.map((tx, index) => (
                 <div key={index} className="p-4 flex items-center space-x-3">
                   <div className={`rounded-full p-2 ${
                     tx.type === 'receive' ? 'bg-green-100' : 'bg-red-100'
@@ -70,17 +76,28 @@ const TransactionsView: React.FC = () => {
                       <span className={`${
                         tx.type === 'receive' ? 'text-green-600' : 'text-red-600'
                       } font-medium`}>
-                        {tx.type === 'receive' ? '+' : '-'}{tx.amount} SOL
+                        {tx.type === 'receive' ? '+' : '-'}{tx.amount.toFixed(5)} SOL
                       </span>
                     </div>
                     
                     <div className="flex justify-between items-center text-sm text-muted-foreground">
-                      <span>
+                      <span className="truncate max-w-[150px]">
                         {tx.type === 'receive' 
-                          ? `From: ${tx.from}` 
-                          : `To: ${tx.to}`}
+                          ? `From: ${tx.from?.substring(0, 4)}...${tx.from?.substring(tx.from.length - 4)}` 
+                          : `To: ${tx.to?.substring(0, 4)}...${tx.to?.substring(tx.to.length - 4)}`}
                       </span>
                       <span>{formatDate(tx.timestamp)}</span>
+                    </div>
+                    
+                    <div className="mt-2">
+                      <Button 
+                        variant="link" 
+                        size="sm" 
+                        className="p-0 h-auto text-xs"
+                        onClick={() => handleOpenExplorer(tx.signature)}
+                      >
+                        View on Solscan
+                      </Button>
                     </div>
                   </div>
                 </div>

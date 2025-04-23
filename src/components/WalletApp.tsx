@@ -1,8 +1,10 @@
+
 import React, { useEffect } from 'react';
 import WalletLayout from './WalletLayout';
 import WelcomeScreen from './WelcomeScreen';
 import CreateWallet from './CreateWallet';
 import ImportWallet from './ImportWallet';
+import BackupView from './BackupView';
 import Dashboard from './Dashboard';
 import SendView from './SendView';
 import ReceiveView from './ReceiveView';
@@ -11,7 +13,7 @@ import TransactionsView from './TransactionsView';
 import useWalletStore from '@/store/walletStore';
 
 const WalletApp: React.FC = () => {
-  const { currentView, isWalletInitialized } = useWalletStore();
+  const { currentView, isWalletInitialized, seedPhraseBackedUp } = useWalletStore();
   
   // Check for existing wallet on load
   useEffect(() => {
@@ -25,9 +27,9 @@ const WalletApp: React.FC = () => {
   }, []);
   
   const renderContent = () => {
-    // If we have a wallet but not on the dashboard yet, show the dashboard
-    if (isWalletInitialized && currentView === 'welcome') {
-      return <Dashboard />;
+    // If wallet is initialized but seed phrase isn't backed up, always show backup view
+    if (isWalletInitialized && !seedPhraseBackedUp && currentView !== 'backup') {
+      return <BackupView />;
     }
     
     // Otherwise show the appropriate view
@@ -38,6 +40,8 @@ const WalletApp: React.FC = () => {
         return <CreateWallet />;
       case 'import':
         return <ImportWallet />;
+      case 'backup':
+        return <BackupView />;
       case 'dashboard':
         return <Dashboard />;
       case 'send':

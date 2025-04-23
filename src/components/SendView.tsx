@@ -6,10 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/components/ui/use-toast';
+import { ArrowRight, ExternalLink } from 'lucide-react';
 import useWalletStore from '@/store/walletStore';
 
 const SendView: React.FC = () => {
-  const { solBalance, network } = useWalletStore();
+  const { solBalance, network, sendTransaction, getExplorerUrl } = useWalletStore();
   const { toast } = useToast();
   
   const [recipient, setRecipient] = useState('');
@@ -17,9 +18,11 @@ const SendView: React.FC = () => {
   const [memo, setMemo] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [txSignature, setTxSignature] = useState<string | null>(null);
   
   const handleSend = async () => {
     setError('');
+    setTxSignature(null);
     
     if (!recipient) {
       setError('Recipient address is required');
@@ -38,9 +41,11 @@ const SendView: React.FC = () => {
     
     setIsLoading(true);
     
-    // Simulate a transaction for demonstration
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      // Send a real transaction to the blockchain
+      const signature = await sendTransaction(recipient, parseFloat(amount), memo || undefined);
+      
+      setTxSignature(signature);
       
       toast({
         title: "Transaction sent",
@@ -48,12 +53,28 @@ const SendView: React.FC = () => {
       });
       
       // Reset the form
-      setRecipient('');
       setAmount('');
       setMemo('');
       
-      // In a real implementation, we would send the transaction to the blockchain
-    }, 1500);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(errorMessage);
+      
+      toast({
+        title: "Transaction failed",
+        description: errorMessage,
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleOpenExplorer = () => {
+    if (txSignature) {
+      const url = getExplorerUrl(txSignature);
+      window.open(url, '_blank');
+    }
   };
   
   return (
@@ -71,6 +92,23 @@ const SendView: React.FC = () => {
             <Alert variant="destructive">
               <AlertDescription>
                 {error}
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {txSignature && (
+            <Alert>
+              <AlertDescription className="flex flex-col gap-2">
+                <p>Transaction submitted successfully!</p>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full flex items-center justify-center"
+                  onClick={handleOpenExplorer}
+                >
+                  <ExternalLink className="h-4 w-4 mr-1" />
+                  View on Solscan
+                </Button>
               </AlertDescription>
             </Alert>
           )}
@@ -119,8 +157,14 @@ const SendView: React.FC = () => {
           <Button 
             onClick={handleSend}
             disabled={isLoading}
+            className="flex items-center"
           >
-            {isLoading ? 'Sending...' : 'Send SOL'}
+            {isLoading ? 'Sending...' : (
+              <>
+                Send SOL
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </>
+            )}
           </Button>
         </CardFooter>
       </Card>

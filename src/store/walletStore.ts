@@ -1,8 +1,19 @@
 
 import { create } from 'zustand';
-import { Connection, PublicKey, LAMPORTS_PER_SOL, clusterApiUrl } from '@solana/web3.js';
+import { 
+  Connection, 
+  PublicKey, 
+  LAMPORTS_PER_SOL, 
+  clusterApiUrl, 
+  SystemProgram,
+  Transaction,
+  SendTransactionError,
+  Keypair
+} from '@solana/web3.js';
 import * as bip39 from 'bip39';
 import CryptoJS from 'crypto-js';
+import { nacl } from 'tweetnacl';
+import { derivePath } from 'ed25519-hd-key';
 
 export type NetworkType = 'devnet' | 'testnet' | 'mainnet-beta';
 
@@ -10,11 +21,15 @@ export interface WalletState {
   // Wallet and connection
   mnemonic: string | null;
   publicKey: string | null;
-  keypair: any | null; // We'll store the keypair in memory only when needed
+  keypair: Keypair | null;
   encryptedMnemonic: string | null;
   isWalletInitialized: boolean;
   network: NetworkType;
   connection: Connection;
+  
+  // Seed phrase backup
+  seedPhraseBackedUp: boolean;
+  showSeedPhrase: boolean;
   
   // Balances
   solBalance: number;
@@ -34,11 +49,13 @@ export interface WalletState {
     to?: string;
     from?: string;
     token?: string;
+    status?: 'confirmed' | 'processing' | 'failed';
   }>;
+  isLoadingTransactions: boolean;
   
   // UI state
   isLoading: boolean;
-  currentView: 'welcome' | 'create' | 'import' | 'dashboard' | 'send' | 'receive' | 'settings' | 'transactions';
+  currentView: 'welcome' | 'create' | 'import' | 'dashboard' | 'send' | 'receive' | 'settings' | 'transactions' | 'backup';
   error: string | null;
   
   // Methods
@@ -48,8 +65,13 @@ export interface WalletState {
   unlockWallet: (password: string) => Promise<boolean>;
   signOut: () => void;
   fetchSolBalance: () => Promise<void>;
+  fetchTransactionHistory: () => Promise<void>;
+  sendTransaction: (recipient: string, amount: number, memo?: string) => Promise<string>;
   refreshWallet: () => Promise<void>;
   setCurrentView: (view: WalletState['currentView']) => void;
+  setSeedPhraseBackedUp: (value: boolean) => void;
+  setShowSeedPhrase: (value: boolean) => void;
+  getExplorerUrl: (signature: string) => string;
 }
 
 // Completely browser-compatible mnemonic generation
@@ -105,6 +127,26 @@ const validateMnemonic = (mnemonic: string): boolean => {
   }
 };
 
+// Function to derive keypair from mnemonic
+const getKeypairFromMnemonic = (mnemonic: string): Keypair => {
+  try {
+    // We'll use SHA256 of the mnemonic to derive a seed
+    const seed = CryptoJS.SHA256(mnemonic).toString();
+    
+    // Use the first 32 bytes for a keypair (simplified for browser compatibility)
+    const secretKeyBytes = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) {
+      // Take two hex characters at a time from the seed to create a byte
+      secretKeyBytes[i] = parseInt(seed.slice(i * 2, i * 2 + 2), 16);
+    }
+    
+    return Keypair.fromSecretKey(secretKeyBytes);
+  } catch (error) {
+    console.error('Failed to derive keypair:', error);
+    throw new Error('Failed to derive keypair from mnemonic');
+  }
+};
+
 // Create the store
 const useWalletStore = create<WalletState>((set, get) => ({
   // Initial state
@@ -116,10 +158,14 @@ const useWalletStore = create<WalletState>((set, get) => ({
   network: 'devnet',
   connection: new Connection(clusterApiUrl('devnet'), 'confirmed'),
   
+  seedPhraseBackedUp: false,
+  showSeedPhrase: false,
+  
   solBalance: 0,
   tokenBalances: [],
   
   transactions: [],
+  isLoadingTransactions: false,
   
   isLoading: false,
   currentView: 'welcome',
@@ -130,6 +176,7 @@ const useWalletStore = create<WalletState>((set, get) => ({
     const connection = new Connection(clusterApiUrl(network), 'confirmed');
     set({ network, connection });
     get().fetchSolBalance();
+    get().fetchTransactionHistory();
   },
   
   createWallet: async (password) => {
@@ -141,17 +188,19 @@ const useWalletStore = create<WalletState>((set, get) => ({
       // Encrypt the mnemonic with the password
       const encryptedMnemonic = CryptoJS.AES.encrypt(mnemonic, password).toString();
       
-      // Simulating keypair for now - to be replaced with proper derivation
-      const keypairSeed = CryptoJS.SHA256(mnemonic).toString();
-      const publicKey = keypairSeed.slice(0, 44); // Just a placeholder
+      // Generate a real keypair from the mnemonic
+      const keypair = getKeypairFromMnemonic(mnemonic);
+      const publicKey = keypair.publicKey.toBase58();
       
       // Set state
       set({
         mnemonic,
         encryptedMnemonic,
         publicKey,
+        keypair,
         isWalletInitialized: true,
-        currentView: 'dashboard',
+        currentView: 'backup', // Changed from dashboard to backup
+        seedPhraseBackedUp: false,
         isLoading: false
       });
       
@@ -181,25 +230,28 @@ const useWalletStore = create<WalletState>((set, get) => ({
       // Encrypt the mnemonic with the password
       const encryptedMnemonic = CryptoJS.AES.encrypt(mnemonic, password).toString();
       
-      // Simulating keypair for now - to be replaced with proper derivation
-      const keypairSeed = CryptoJS.SHA256(mnemonic).toString();
-      const publicKey = keypairSeed.slice(0, 44); // Just a placeholder
+      // Generate a real keypair from the mnemonic
+      const keypair = getKeypairFromMnemonic(mnemonic);
+      const publicKey = keypair.publicKey.toBase58();
       
       // Set state
       set({
         mnemonic,
         encryptedMnemonic,
         publicKey,
+        keypair,
         isWalletInitialized: true,
         currentView: 'dashboard',
+        seedPhraseBackedUp: true,  // Assuming user knows their mnemonic when importing
         isLoading: false
       });
       
       // Save encrypted mnemonic to localStorage
       localStorage.setItem('soloasisWallet', encryptedMnemonic);
       
-      // Fetch balance
+      // Fetch balance and transactions
       await get().fetchSolBalance();
+      await get().fetchTransactionHistory();
     } catch (error) {
       console.error('Error importing wallet:', error);
       set({ 
@@ -227,22 +279,24 @@ const useWalletStore = create<WalletState>((set, get) => ({
         throw new Error('Invalid password');
       }
       
-      // Simulating keypair for now - to be replaced with proper derivation
-      const keypairSeed = CryptoJS.SHA256(mnemonic).toString();
-      const publicKey = keypairSeed.slice(0, 44); // Just a placeholder
+      // Generate a real keypair from the mnemonic
+      const keypair = getKeypairFromMnemonic(mnemonic);
+      const publicKey = keypair.publicKey.toBase58();
       
       // Set state
       set({
         mnemonic,
         encryptedMnemonic,
         publicKey,
+        keypair,
         isWalletInitialized: true,
         currentView: 'dashboard',
         isLoading: false
       });
       
-      // Fetch balance
+      // Fetch balance and transactions
       await get().fetchSolBalance();
+      await get().fetchTransactionHistory();
       
       return true;
     } catch (error) {
@@ -262,7 +316,8 @@ const useWalletStore = create<WalletState>((set, get) => ({
       keypair: null,
       isWalletInitialized: false,
       currentView: 'welcome',
-      error: null
+      error: null,
+      transactions: []
     });
   },
   
@@ -272,24 +327,152 @@ const useWalletStore = create<WalletState>((set, get) => ({
     if (!publicKey) return;
     
     try {
-      // This is just a placeholder - in a real implementation, we would use the actual public key
-      // const balance = await connection.getBalance(new PublicKey(publicKey));
-      // set({ solBalance: balance / LAMPORTS_PER_SOL });
-      
-      // For demo purposes, we'll just set a random balance
-      set({ solBalance: Math.random() * 10 });
+      // This is a real balance fetch using the Solana connection
+      const balance = await connection.getBalance(new PublicKey(publicKey));
+      set({ solBalance: balance / LAMPORTS_PER_SOL });
     } catch (error) {
       console.error('Error fetching SOL balance:', error);
     }
   },
   
+  fetchTransactionHistory: async () => {
+    const { connection, publicKey, network } = get();
+    
+    if (!publicKey) return;
+    
+    set({ isLoadingTransactions: true });
+    
+    try {
+      // Fetch transaction signatures for the account
+      const pubKey = new PublicKey(publicKey);
+      const signatures = await connection.getSignaturesForAddress(pubKey, { limit: 10 });
+      
+      // Process each transaction to get details
+      const transactionDetails = await Promise.all(
+        signatures.map(async (sig) => {
+          try {
+            const tx = await connection.getTransaction(sig.signature);
+            
+            if (!tx || !tx.meta) return null;
+            
+            // Determine if this account is sender or receiver
+            const isReceiver = tx.transaction.message.accountKeys[0].toString() !== pubKey.toString();
+            
+            // Calculate amount (simplified - assumes simple SOL transfers)
+            const amount = Math.abs(tx.meta.postBalances[0] - tx.meta.preBalances[0]) / LAMPORTS_PER_SOL;
+            
+            return {
+              signature: sig.signature,
+              timestamp: tx.blockTime ? tx.blockTime * 1000 : Date.now(),
+              amount,
+              type: isReceiver ? 'receive' : 'send',
+              to: isReceiver ? pubKey.toString() : tx.transaction.message.accountKeys[1]?.toString(),
+              from: isReceiver ? tx.transaction.message.accountKeys[0]?.toString() : pubKey.toString(),
+              status: 'confirmed',
+            };
+          } catch (error) {
+            console.error('Error parsing transaction:', error);
+            return null;
+          }
+        })
+      );
+      
+      // Filter out null values and set to state
+      const validTransactions = transactionDetails.filter(tx => tx !== null) as WalletState['transactions'];
+      set({ transactions: validTransactions, isLoadingTransactions: false });
+    } catch (error) {
+      console.error('Error fetching transaction history:', error);
+      set({ isLoadingTransactions: false });
+    }
+  },
+  
+  sendTransaction: async (recipient, amount, memo) => {
+    const { connection, publicKey, keypair, network } = get();
+    
+    if (!publicKey || !keypair) {
+      throw new Error('Wallet not initialized');
+    }
+    
+    try {
+      const recipientPubkey = new PublicKey(recipient);
+      const lamports = amount * LAMPORTS_PER_SOL;
+      
+      // Create a simple transaction
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: keypair.publicKey,
+          toPubkey: recipientPubkey,
+          lamports,
+        })
+      );
+      
+      // Add memo if provided
+      if (memo) {
+        // This would require memo program, simplified for now
+      }
+      
+      // Send the transaction
+      const signature = await connection.sendTransaction(transaction, [keypair]);
+      
+      // Wait for confirmation
+      const confirmation = await connection.confirmTransaction(signature);
+      
+      if (confirmation.value.err) {
+        throw new Error('Transaction failed to confirm');
+      }
+      
+      // Add to local transaction history
+      const newTransaction = {
+        signature,
+        timestamp: Date.now(),
+        amount,
+        type: 'send' as const,
+        to: recipient,
+        from: publicKey,
+        status: 'confirmed' as const
+      };
+      
+      set(state => ({
+        transactions: [newTransaction, ...state.transactions]
+      }));
+      
+      // Refresh balance
+      await get().fetchSolBalance();
+      
+      return signature;
+    } catch (error) {
+      console.error('Error sending transaction:', error);
+      if (error instanceof SendTransactionError) {
+        throw new Error(`Transaction failed: ${error.message}`);
+      }
+      throw error;
+    }
+  },
+  
   refreshWallet: async () => {
     await get().fetchSolBalance();
-    // We would also fetch token balances and transaction history here
+    await get().fetchTransactionHistory();
+  },
+  
+  setSeedPhraseBackedUp: (value) => {
+    set({ seedPhraseBackedUp: value });
+  },
+  
+  setShowSeedPhrase: (value) => {
+    set({ showSeedPhrase: value });
   },
   
   setCurrentView: (view) => {
     set({ currentView: view });
+  },
+  
+  getExplorerUrl: (signature) => {
+    const { network } = get();
+    const baseUrl = network === 'mainnet-beta' 
+      ? 'https://solscan.io'
+      : `https://solscan.io/${network}`;
+      
+    return `${baseUrl}/tx/${signature}`;
   }
 }));
 
