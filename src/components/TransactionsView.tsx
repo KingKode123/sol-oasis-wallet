@@ -2,7 +2,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Send, Receive } from 'lucide-react';
+import { Send, ArrowDown } from 'lucide-react';
 import useWalletStore from '@/store/walletStore';
 
 const TransactionsView: React.FC = () => {
@@ -56,7 +56,7 @@ const TransactionsView: React.FC = () => {
                     tx.type === 'receive' ? 'bg-green-100' : 'bg-red-100'
                   }`}>
                     {tx.type === 'receive' ? (
-                      <Receive className="h-5 w-5 text-green-600" />
+                      <ArrowDown className="h-5 w-5 text-green-600" />
                     ) : (
                       <Send className="h-5 w-5 text-red-600" />
                     )}

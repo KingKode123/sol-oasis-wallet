@@ -1,10 +1,9 @@
-
 import React, { useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Send, Receive, RefreshCw } from 'lucide-react';
+import { Send, ArrowDown, RefreshCw } from 'lucide-react';
 import useWalletStore from '@/store/walletStore';
 
 const Dashboard: React.FC = () => {
@@ -61,7 +60,7 @@ const Dashboard: React.FC = () => {
           Send
         </Button>
         <Button onClick={() => setCurrentView('receive')} className="flex-1 flex items-center justify-center">
-          <Receive className="h-4 w-4 mr-2" />
+          <ArrowDown className="h-4 w-4 mr-2" />
           Receive
         </Button>
       </div>

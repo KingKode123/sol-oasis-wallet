@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Wallet, Send, Receive, Settings, List } from 'lucide-react';
+import { Wallet, Send, ArrowDown, Settings, List } from 'lucide-react';
 import useWalletStore from '@/store/walletStore';
 
 const WalletLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -66,7 +65,7 @@ const WalletLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => 
               className="flex flex-col items-center"
               onClick={() => setCurrentView('receive')}
             >
-              <Receive className="h-5 w-5" />
+              <ArrowDown className="h-5 w-5" />
               <span className="text-xs mt-1">Receive</span>
             </Button>
             
