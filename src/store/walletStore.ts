@@ -126,20 +126,17 @@ const validateMnemonic = (mnemonic: string): boolean => {
   }
 };
 
-// Function to derive keypair from mnemonic
+// Function to derive keypair from mnemonic - FIXED IMPLEMENTATION
 const getKeypairFromMnemonic = (mnemonic: string): Keypair => {
   try {
-    // We'll use SHA256 of the mnemonic to derive a seed
-    const seed = CryptoJS.SHA256(mnemonic).toString();
+    // Generate seed from mnemonic
+    const seed = bip39.mnemonicToSeedSync(mnemonic).slice(0, 32);
     
-    // Use the first 32 bytes for a keypair (simplified for browser compatibility)
-    const secretKeyBytes = new Uint8Array(32);
-    for (let i = 0; i < 32; i++) {
-      // Take two hex characters at a time from the seed to create a byte
-      secretKeyBytes[i] = parseInt(seed.slice(i * 2, i * 2 + 2), 16);
-    }
+    // Convert to Uint8Array for Solana keypair
+    const seedArray = new Uint8Array(seed);
     
-    return Keypair.fromSecretKey(secretKeyBytes);
+    // Create keypair directly from seed bytes
+    return Keypair.fromSeed(seedArray);
   } catch (error) {
     console.error('Failed to derive keypair:', error);
     throw new Error('Failed to derive keypair from mnemonic');
