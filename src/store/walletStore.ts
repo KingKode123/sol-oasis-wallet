@@ -80,63 +80,32 @@ const generateMnemonic = (): string => {
     const entropy = new Uint8Array(16); // 16 bytes = 128 bits for 12-word mnemonic
     window.crypto.getRandomValues(entropy);
     
-    // Convert to hex string
-    const entropyHex = Array.from(entropy)
+    // Generate mnemonic directly using bip39
+    return bip39.entropyToMnemonic(Array.from(entropy)
       .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-    
-    // We'll use a modified approach that doesn't directly use bip39.entropyToMnemonic
-    // Instead, we'll use a hardcoded list of BIP39 words
-    const wordlist = bip39.wordlists.english;
-    
-    // Calculate checksum
-    const sha256Hash = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(entropyHex)).toString();
-    const checksumBits = parseInt(sha256Hash[0], 16).toString(2).padStart(4, '0');
-    
-    // Convert entropy + checksum to mnemonic words
-    const bits = entropyHex.split('').map(c => parseInt(c, 16).toString(2).padStart(4, '0')).join('') + checksumBits;
-    const chunks = bits.match(/(.{1,11})/g) || [];
-    
-    // Map each 11-bit chunk to a word from the wordlist
-    const words = chunks.map(binary => {
-      const index = parseInt(binary, 2);
-      return wordlist[index];
-    });
-    
-    return words.join(' ');
+      .join(''));
   } catch (error) {
     console.error('Failed to generate mnemonic:', error);
     throw new Error('Failed to generate mnemonic');
   }
 };
 
-// Utility function to validate mnemonic without using Buffer
+// Utility function to validate mnemonic
 const validateMnemonic = (mnemonic: string): boolean => {
-  try {
-    const words = mnemonic.split(' ');
-    // Check basic validation - word count and all words in wordlist
-    if (words.length !== 12 && words.length !== 24) {
-      return false;
-    }
-    
-    const wordlist = bip39.wordlists.english;
-    return words.every(word => wordlist.includes(word));
-  } catch (error) {
-    return false;
-  }
+  return bip39.validateMnemonic(mnemonic);
 };
 
 // Function to derive keypair from mnemonic - FIXED IMPLEMENTATION
 const getKeypairFromMnemonic = (mnemonic: string): Keypair => {
   try {
     // Generate seed from mnemonic
-    const seed = bip39.mnemonicToSeedSync(mnemonic).slice(0, 32);
+    const seed = bip39.mnemonicToSeedSync(mnemonic);
     
-    // Convert to Uint8Array for Solana keypair
-    const seedArray = new Uint8Array(seed);
+    // Use derivePath from ed25519-hd-key
+    const derivedSeed = derivePath("m/44'/501'/0'/0'", seed.toString('hex')).key;
     
-    // Create keypair directly from seed bytes
-    return Keypair.fromSeed(seedArray);
+    // Create keypair from derived seed
+    return Keypair.fromSeed(Uint8Array.from(derivedSeed));
   } catch (error) {
     console.error('Failed to derive keypair:', error);
     throw new Error('Failed to derive keypair from mnemonic');

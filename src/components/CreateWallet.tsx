@@ -41,10 +41,11 @@ const CreateWallet: React.FC = () => {
       await createWallet(password);
       toast({
         title: "Wallet created successfully!",
-        description: "Your new wallet is ready to use.",
+        description: "Please backup your recovery phrase on the next screen.",
       });
     } catch (err) {
       console.error('Error in component:', err);
+      setShowError(error || "An unknown error occurred");
       toast({
         title: "Error creating wallet",
         description: error || "An unknown error occurred",
