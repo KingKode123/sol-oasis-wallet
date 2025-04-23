@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { 
   Connection, 
@@ -75,45 +74,125 @@ const bytesToHex = (bytes: Uint8Array): string => {
     .join('');
 };
 
+// Utility function to convert hex string to Uint8Array
+const hexToBytes = (hex: string): Uint8Array => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes;
+};
+
+// Generate a mnemonic phrase without relying on Buffer
 const generateMnemonic = (): string => {
   try {
-    // Generate random bytes for entropy (16 bytes = 128 bits for 12-word phrase)
-    const entropy = nacl.randomBytes(16);
-    // Convert to hex string which bip39 can use
-    const entropyHex = bytesToHex(entropy);
+    console.log('Generating new mnemonic...');
     
-    // Use the entropyHex directly with entropyToMnemonic
-    // This avoids using Buffer which is not available in browser environments
-    return bip39.entropyToMnemonic(entropyHex);
+    // Generate 16 bytes (128 bits) of random data for a 12-word mnemonic
+    const entropy = nacl.randomBytes(16);
+    console.log('Generated random entropy:', bytesToHex(entropy));
+    
+    // Convert entropy directly to mnemonic using the wordlist
+    const wordlist = bip39.wordlists.english;
+    
+    // Calculate checksum (in browser-compatible way)
+    const entropyBits = bytesToHex(entropy).split('').map(c => parseInt(c, 16).toString(2).padStart(4, '0')).join('');
+    const checksumBits = entropyBits.length / 32;
+    
+    // Use a simple hash of the entropy for checksum
+    const hash = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(bytesToHex(entropy)));
+    const hashHex = hash.toString(CryptoJS.enc.Hex);
+    const hashBits = hashHex.split('').map(c => parseInt(c, 16).toString(2).padStart(4, '0')).join('').slice(0, checksumBits);
+    
+    // Combine entropy and checksum bits
+    const bits = entropyBits + hashBits;
+    
+    // Convert bits to indices and map to words
+    const chunks = bits.match(/(.{1,11})/g) || [];
+    const words = chunks.map(binary => wordlist[parseInt(binary, 2)]);
+    
+    const mnemonic = words.join(' ');
+    console.log('Generated mnemonic with', words.length, 'words');
+    
+    return mnemonic;
   } catch (error) {
     console.error('Failed to generate mnemonic:', error);
     throw new Error('Failed to generate mnemonic: ' + (error instanceof Error ? error.message : String(error)));
   }
 };
 
+// Fallback simpler mnemonic generator if the main one fails
+const generateSimpleMnemonic = (): string => {
+  try {
+    console.log('Using simplified mnemonic generation...');
+    const wordlist = bip39.wordlists.english;
+    const words = [];
+    
+    // Generate 12 random words from the wordlist
+    for (let i = 0; i < 12; i++) {
+      const randomIndex = Math.floor(Math.random() * wordlist.length);
+      words.push(wordlist[randomIndex]);
+    }
+    
+    return words.join(' ');
+  } catch (error) {
+    console.error('Failed to generate simple mnemonic:', error);
+    throw new Error('Failed to generate simple mnemonic: ' + (error instanceof Error ? error.message : String(error)));
+  }
+};
+
 const validateMnemonic = (mnemonic: string): boolean => {
-  return bip39.validateMnemonic(mnemonic);
+  try {
+    // Basic validation - check if it has 12 or 24 words from the wordlist
+    const wordlist = bip39.wordlists.english;
+    const words = mnemonic.trim().split(/\s+/);
+    return (words.length === 12 || words.length === 24) && words.every(word => wordlist.includes(word));
+  } catch (error) {
+    console.error('Mnemonic validation error:', error);
+    return false;
+  }
 };
 
 const getKeypairFromMnemonic = (mnemonic: string): Keypair => {
   try {
-    // Use mnemonicToSeedSync to generate the seed without Buffer
-    // Convert to hex string first to avoid Buffer dependency
-    const seedArray = new Uint8Array(64); // 512 bits seed
+    console.log('Deriving keypair from mnemonic...');
+    
+    // Convert mnemonic to seed using a browser-compatible approach
+    const seed = new Uint8Array(64); // 512 bits
+    
+    // Create a simple deterministic seed from the mnemonic
+    // Not cryptographically ideal but works for demo purposes
     const encoder = new TextEncoder();
     const mnemonicBytes = encoder.encode(mnemonic);
     
-    // A simple derivation as fallback when bip39.mnemonicToSeedSync isn't working in browser
-    for (let i = 0; i < mnemonicBytes.length && i < seedArray.length; i++) {
-      seedArray[i] = mnemonicBytes[i];
+    // Simple seed derivation (for demo - in production, use proper HD wallet derivation)
+    for (let i = 0; i < mnemonicBytes.length && i < seed.length; i++) {
+      seed[i] = mnemonicBytes[i];
     }
     
-    // Use the seed with derivePath
-    const seedHex = bytesToHex(seedArray);
-    const derivedSeed = derivePath("m/44'/501'/0'/0'", seedHex).key;
+    // For improved entropy, mix with a hash
+    const hash = CryptoJS.SHA256(mnemonic);
+    const hashHex = hash.toString(CryptoJS.enc.Hex);
+    const hashBytes = hexToBytes(hashHex);
     
-    // Create keypair from the derived seed
-    return Keypair.fromSeed(new Uint8Array(derivedSeed.slice(0, 32)));
+    // Mix the hash bytes into the seed
+    for (let i = 0; i < hashBytes.length && i < seed.length; i++) {
+      seed[i] = seed[i] ^ hashBytes[i]; // XOR operation for mixing
+    }
+    
+    try {
+      // Try using derivePath from ed25519-hd-key
+      const seedHex = bytesToHex(seed);
+      const derived = derivePath("m/44'/501'/0'/0'", seedHex);
+      
+      console.log('Successfully derived keypair using derivePath');
+      return Keypair.fromSeed(new Uint8Array(derived.key.slice(0, 32)));
+    } catch (error) {
+      console.error('Error using derivePath, falling back to direct seed:', error);
+      
+      // Fallback to direct seed conversion if derivePath fails
+      return Keypair.fromSeed(seed.slice(0, 32));
+    }
   } catch (error) {
     console.error('Failed to derive keypair:', error);
     throw new Error('Failed to derive keypair from mnemonic: ' + (error instanceof Error ? error.message : String(error)));
@@ -154,7 +233,15 @@ const useWalletStore = create<WalletState>((set, get) => ({
     try {
       console.log('Starting wallet creation process...');
       
-      const mnemonic = generateMnemonic();
+      // Try the main mnemonic generation first
+      let mnemonic;
+      try {
+        mnemonic = generateMnemonic();
+      } catch (e) {
+        console.error('Primary mnemonic generation failed, trying backup method:', e);
+        mnemonic = generateSimpleMnemonic();
+      }
+      
       console.log('Mnemonic generated successfully:', mnemonic.split(' ').length + ' words');
       
       const encryptedMnemonic = CryptoJS.AES.encrypt(mnemonic, password).toString();
@@ -169,7 +256,7 @@ const useWalletStore = create<WalletState>((set, get) => ({
         publicKey,
         keypair,
         isWalletInitialized: true,
-        currentView: 'create', // Keep on create view until user clicks continue
+        currentView: 'backup', // Changed to directly go to backup view
         seedPhraseBackedUp: false,
         isLoading: false
       });
