@@ -107,7 +107,13 @@ const generateMnemonic = (): string => {
     const hashHex = hash.toString(CryptoJS.enc.Hex);
     const hashBytes = hexToBytes(hashHex);
     
-    const bits = entropyBits + hashBits;
+    const checksumBinary = bytesToHex(hashBytes)
+      .split('')
+      .map(c => parseInt(c, 16).toString(2).padStart(4, '0'))
+      .join('')
+      .slice(0, checksumBits);
+    
+    const bits = entropyBits + checksumBinary;
     
     const chunks = bits.match(/(.{1,11})/g) || [];
     const words = chunks.map(binary => wordlist[parseInt(binary, 2)]);
