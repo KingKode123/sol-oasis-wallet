@@ -464,7 +464,12 @@ const useWalletStore = create<WalletState>((set, get) => ({
       const recipientPubkey = new PublicKey(recipient);
       const lamports = amount * LAMPORTS_PER_SOL;
       
-      const transaction = new Transaction().add(
+      const transaction = new Transaction();
+      
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      
+      transaction.add(
         SystemProgram.transfer({
           fromPubkey: keypair.publicKey,
           toPubkey: recipientPubkey,
@@ -486,6 +491,8 @@ const useWalletStore = create<WalletState>((set, get) => ({
         
         signature = await connection.sendRawTransaction(transaction.serialize());
       } else {
+        transaction.feePayer = keypair.publicKey;
+        
         signature = await connection.sendTransaction(transaction, [keypair]);
       }
       
