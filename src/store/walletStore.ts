@@ -23,6 +23,7 @@ export interface WalletState {
   encryptedMnemonic: string | null;
   isWalletInitialized: boolean;
   network: NetworkType;
+  connection: Connection;
   
   gasAccountPublicKey: string | null;
   gasAccountKeypair: Keypair | null;
@@ -104,7 +105,7 @@ const generateMnemonic = (): string => {
     
     const hash = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(bytesToHex(entropy)));
     const hashHex = hash.toString(CryptoJS.enc.Hex);
-    const hashBits = hashHex.split('').map(c => parseInt(c, 16).toString(2).padStart(4, '0')).join('').slice(0, checksumBits);
+    const hashBytes = hexToBytes(hashHex);
     
     const bits = entropyBits + hashBits;
     
