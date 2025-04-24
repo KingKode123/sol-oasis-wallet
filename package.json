@@ -44,6 +44,7 @@
     "@types/bip39": "^2.4.2",
     "@types/crypto-js": "^4.2.2",
     "bip39": "^3.1.0",
+    "bs58": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",

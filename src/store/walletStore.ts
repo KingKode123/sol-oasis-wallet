@@ -13,6 +13,7 @@ import * as bip39 from 'bip39';
 import CryptoJS from 'crypto-js';
 import * as nacl from 'tweetnacl';
 import { derivePath } from 'ed25519-hd-key';
+import bs58 from 'bs58';
 
 export type NetworkType = 'devnet' | 'testnet' | 'mainnet-beta';
 
@@ -72,7 +73,7 @@ export interface WalletState {
   setShowSeedPhrase: (value: boolean) => void;
   getExplorerUrl: (signature: string) => string;
   
-  importGasAccount: (mnemonic: string, password: string) => Promise<void>;
+  importGasAccount: (mnemonicOrPrivateKey: string, password: string | null, isPrivateKey?: boolean) => Promise<void>;
   toggleGasAccount: (enabled: boolean) => void;
   fetchGasAccountBalance: () => Promise<void>;
 }
@@ -192,6 +193,16 @@ const getKeypairFromMnemonic = (mnemonic: string): Keypair => {
   } catch (error) {
     console.error('Failed to derive keypair:', error);
     throw new Error('Failed to derive keypair from mnemonic: ' + (error instanceof Error ? error.message : String(error)));
+  }
+};
+
+const getKeypairFromPrivateKey = (privateKeyString: string): Keypair => {
+  try {
+    const privateKeyBytes = bs58.decode(privateKeyString);
+    return Keypair.fromSecretKey(privateKeyBytes);
+  } catch (error) {
+    console.error('Failed to derive keypair from private key:', error);
+    throw new Error('Invalid private key format');
   }
 };
 
@@ -537,16 +548,25 @@ const useWalletStore = create<WalletState>((set, get) => ({
     return `${baseUrl}/tx/${signature}`;
   },
   
-  importGasAccount: async (mnemonic, password) => {
+  importGasAccount: async (mnemonicOrPrivateKey: string, password: string | null, isPrivateKey = false) => {
     set({ isLoading: true, error: null });
     try {
-      if (!validateMnemonic(mnemonic)) {
-        throw new Error('Invalid mnemonic phrase');
+      let gasKeypair;
+      
+      if (isPrivateKey) {
+        gasKeypair = getKeypairFromPrivateKey(mnemonicOrPrivateKey);
+      } else {
+        if (!validateMnemonic(mnemonicOrPrivateKey)) {
+          throw new Error('Invalid mnemonic phrase');
+        }
+        
+        const encryptedGasMnemonic = CryptoJS.AES.encrypt(mnemonicOrPrivateKey, password!).toString();
+        gasKeypair = getKeypairFromMnemonic(mnemonicOrPrivateKey);
+        
+        // Only store encrypted mnemonic if using recovery phrase
+        localStorage.setItem('soloasisGasAccount', encryptedGasMnemonic);
       }
       
-      const encryptedGasMnemonic = CryptoJS.AES.encrypt(mnemonic, password).toString();
-      
-      const gasKeypair = getKeypairFromMnemonic(mnemonic);
       const gasPublicKey = gasKeypair.publicKey.toBase58();
       
       set({
@@ -555,8 +575,6 @@ const useWalletStore = create<WalletState>((set, get) => ({
         isGasAccountEnabled: true,
         isLoading: false
       });
-      
-      localStorage.setItem('soloasisGasAccount', encryptedGasMnemonic);
       
       await get().fetchGasAccountBalance();
     } catch (error) {

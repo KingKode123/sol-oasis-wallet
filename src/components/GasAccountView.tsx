@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
-import { ArrowRight, Wallet } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ArrowRight, Wallet, Copy } from 'lucide-react';
 import useWalletStore from '@/store/walletStore';
 
 const GasAccountView: React.FC = () => {
@@ -17,34 +18,46 @@ const GasAccountView: React.FC = () => {
     importGasAccount, 
     isGasAccountEnabled, 
     toggleGasAccount,
-    network,
-    getExplorerUrl
+    network
   } = useWalletStore();
   
   const { toast } = useToast();
   
   const [mnemonic, setMnemonic] = useState('');
+  const [privateKey, setPrivateKey] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState('mnemonic');
   
   const handleImportGasAccount = async () => {
     setError('');
     
-    if (!mnemonic) {
-      setError('Recovery phrase is required');
-      return;
-    }
-    
-    if (!password) {
-      setError('Password is required');
-      return;
+    if (activeTab === 'mnemonic') {
+      if (!mnemonic) {
+        setError('Recovery phrase is required');
+        return;
+      }
+      
+      if (!password) {
+        setError('Password is required');
+        return;
+      }
+    } else {
+      if (!privateKey) {
+        setError('Private key is required');
+        return;
+      }
     }
     
     setIsLoading(true);
     
     try {
-      await importGasAccount(mnemonic, password);
+      if (activeTab === 'mnemonic') {
+        await importGasAccount(mnemonic, password);
+      } else {
+        await importGasAccount(privateKey, null, true);
+      }
       
       toast({
         title: "Gas account imported",
@@ -53,6 +66,7 @@ const GasAccountView: React.FC = () => {
       
       // Reset the form
       setMnemonic('');
+      setPrivateKey('');
       setPassword('');
       
     } catch (err) {
@@ -69,25 +83,13 @@ const GasAccountView: React.FC = () => {
     }
   };
   
-  const handleToggleGasAccount = (enabled: boolean) => {
-    toggleGasAccount(enabled);
-    
-    toast({
-      title: enabled ? "Gas account enabled" : "Gas account disabled",
-      description: enabled 
-        ? "Transactions will now use the gas account to pay fees" 
-        : "Transactions will now use the main account to pay fees",
-    });
-  };
-  
-  const handleOpenExplorer = () => {
+  const handleCopyAddress = () => {
     if (gasAccountPublicKey) {
-      const baseUrl = network === 'mainnet-beta' 
-        ? 'https://solscan.io'
-        : `https://solscan.io/${network}`;
-        
-      const url = `${baseUrl}/account/${gasAccountPublicKey}`;
-      window.open(url, '_blank');
+      navigator.clipboard.writeText(gasAccountPublicKey);
+      toast({
+        title: "Address copied",
+        description: "Gas account address copied to clipboard",
+      });
     }
   };
   
@@ -101,7 +103,7 @@ const GasAccountView: React.FC = () => {
       </div>
       
       {gasAccountPublicKey ? (
-        // Show gas account details if already imported
+        // Show gas account details and top-up option if already imported
         <Card>
           <CardHeader>
             <CardTitle>Gas Account</CardTitle>
@@ -111,18 +113,21 @@ const GasAccountView: React.FC = () => {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Address</Label>
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-mono bg-muted p-2 rounded-md overflow-hidden text-ellipsis">
+              <div className="flex items-center space-x-2">
+                <div className="flex-1 font-mono bg-muted p-2 rounded-md overflow-hidden text-ellipsis">
                   {gasAccountPublicKey}
-                </p>
+                </div>
                 <Button 
                   variant="outline" 
-                  size="sm"
-                  onClick={handleOpenExplorer}
+                  size="icon"
+                  onClick={handleCopyAddress}
                 >
-                  View
+                  <Copy className="h-4 w-4" />
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Copy this address to send SOL for gas fees
+              </p>
             </div>
             
             <div className="space-y-2">
@@ -137,7 +142,7 @@ const GasAccountView: React.FC = () => {
               <Switch
                 id="use-gas-account"
                 checked={isGasAccountEnabled}
-                onCheckedChange={handleToggleGasAccount}
+                onCheckedChange={toggleGasAccount}
               />
               <Label htmlFor="use-gas-account">Use gas account for transaction fees</Label>
             </div>
@@ -160,27 +165,52 @@ const GasAccountView: React.FC = () => {
               </Alert>
             )}
             
-            <div className="space-y-2">
-              <Label htmlFor="mnemonic">Recovery Phrase</Label>
-              <Input
-                id="mnemonic"
-                placeholder="Enter your 12 or 24 word recovery phrase"
-                value={mnemonic}
-                onChange={(e) => setMnemonic(e.target.value)}
-                className="font-mono"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="password">Wallet Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Enter your wallet password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+            <Tabs defaultValue="mnemonic" onValueChange={setActiveTab}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="mnemonic">Recovery Phrase</TabsTrigger>
+                <TabsTrigger value="private-key">Private Key</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="mnemonic" className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="mnemonic">Recovery Phrase</Label>
+                  <Input
+                    id="mnemonic"
+                    placeholder="Enter your 12 or 24 word recovery phrase"
+                    value={mnemonic}
+                    onChange={(e) => setMnemonic(e.target.value)}
+                    className="font-mono"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="password">Wallet Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Enter your wallet password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+              </TabsContent>
+              
+              <TabsContent value="private-key" className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="private-key">Private Key</Label>
+                  <Input
+                    id="private-key"
+                    placeholder="Enter your private key"
+                    value={privateKey}
+                    onChange={(e) => setPrivateKey(e.target.value)}
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Private key should be in base58 format
+                  </p>
+                </div>
+              </TabsContent>
+            </Tabs>
           </CardContent>
           
           <CardFooter className="flex justify-end">
@@ -204,3 +234,4 @@ const GasAccountView: React.FC = () => {
 };
 
 export default GasAccountView;
+
