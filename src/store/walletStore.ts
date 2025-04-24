@@ -23,12 +23,16 @@ export interface WalletState {
   encryptedMnemonic: string | null;
   isWalletInitialized: boolean;
   network: NetworkType;
-  connection: Connection;
+  
+  gasAccountPublicKey: string | null;
+  gasAccountKeypair: Keypair | null;
+  isGasAccountEnabled: boolean;
   
   seedPhraseBackedUp: boolean;
   showSeedPhrase: boolean;
   
   solBalance: number;
+  gasAccountBalance: number;
   tokenBalances: Array<{
     mint: string;
     symbol: string;
@@ -45,11 +49,12 @@ export interface WalletState {
     from?: string;
     token?: string;
     status?: 'confirmed' | 'processing' | 'failed';
+    gasAccount?: string;
   }>;
   isLoadingTransactions: boolean;
   
   isLoading: boolean;
-  currentView: 'welcome' | 'create' | 'import' | 'dashboard' | 'send' | 'receive' | 'settings' | 'transactions' | 'backup';
+  currentView: 'welcome' | 'create' | 'import' | 'dashboard' | 'send' | 'receive' | 'settings' | 'transactions' | 'backup' | 'gas-account';
   error: string | null;
   
   setNetwork: (network: NetworkType) => void;
@@ -59,22 +64,24 @@ export interface WalletState {
   signOut: () => void;
   fetchSolBalance: () => Promise<void>;
   fetchTransactionHistory: () => Promise<void>;
-  sendTransaction: (recipient: string, amount: number, memo?: string) => Promise<string>;
+  sendTransaction: (recipient: string, amount: number, memo?: string, useGasAccount?: boolean) => Promise<string>;
   refreshWallet: () => Promise<void>;
   setCurrentView: (view: WalletState['currentView']) => void;
   setSeedPhraseBackedUp: (value: boolean) => void;
   setShowSeedPhrase: (value: boolean) => void;
   getExplorerUrl: (signature: string) => string;
+  
+  importGasAccount: (mnemonic: string, password: string) => Promise<void>;
+  toggleGasAccount: (enabled: boolean) => void;
+  fetchGasAccountBalance: () => Promise<void>;
 }
 
-// Utility function to convert Uint8Array to hex string
 const bytesToHex = (bytes: Uint8Array): string => {
   return Array.from(bytes)
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 };
 
-// Utility function to convert hex string to Uint8Array
 const hexToBytes = (hex: string): Uint8Array => {
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < hex.length; i += 2) {
@@ -83,31 +90,24 @@ const hexToBytes = (hex: string): Uint8Array => {
   return bytes;
 };
 
-// Generate a mnemonic phrase without relying on Buffer
 const generateMnemonic = (): string => {
   try {
     console.log('Generating new mnemonic...');
     
-    // Generate 16 bytes (128 bits) of random data for a 12-word mnemonic
     const entropy = nacl.randomBytes(16);
     console.log('Generated random entropy:', bytesToHex(entropy));
     
-    // Convert entropy directly to mnemonic using the wordlist
     const wordlist = bip39.wordlists.english;
     
-    // Calculate checksum (in browser-compatible way)
     const entropyBits = bytesToHex(entropy).split('').map(c => parseInt(c, 16).toString(2).padStart(4, '0')).join('');
     const checksumBits = entropyBits.length / 32;
     
-    // Use a simple hash of the entropy for checksum
     const hash = CryptoJS.SHA256(CryptoJS.enc.Hex.parse(bytesToHex(entropy)));
     const hashHex = hash.toString(CryptoJS.enc.Hex);
     const hashBits = hashHex.split('').map(c => parseInt(c, 16).toString(2).padStart(4, '0')).join('').slice(0, checksumBits);
     
-    // Combine entropy and checksum bits
     const bits = entropyBits + hashBits;
     
-    // Convert bits to indices and map to words
     const chunks = bits.match(/(.{1,11})/g) || [];
     const words = chunks.map(binary => wordlist[parseInt(binary, 2)]);
     
@@ -121,14 +121,12 @@ const generateMnemonic = (): string => {
   }
 };
 
-// Fallback simpler mnemonic generator if the main one fails
 const generateSimpleMnemonic = (): string => {
   try {
     console.log('Using simplified mnemonic generation...');
     const wordlist = bip39.wordlists.english;
     const words = [];
     
-    // Generate 12 random words from the wordlist
     for (let i = 0; i < 12; i++) {
       const randomIndex = Math.floor(Math.random() * wordlist.length);
       words.push(wordlist[randomIndex]);
@@ -143,7 +141,6 @@ const generateSimpleMnemonic = (): string => {
 
 const validateMnemonic = (mnemonic: string): boolean => {
   try {
-    // Basic validation - check if it has 12 or 24 words from the wordlist
     const wordlist = bip39.wordlists.english;
     const words = mnemonic.trim().split(/\s+/);
     return (words.length === 12 || words.length === 24) && words.every(word => wordlist.includes(word));
@@ -157,31 +154,24 @@ const getKeypairFromMnemonic = (mnemonic: string): Keypair => {
   try {
     console.log('Deriving keypair from mnemonic...');
     
-    // Convert mnemonic to seed using a browser-compatible approach
-    const seed = new Uint8Array(64); // 512 bits
+    const seed = new Uint8Array(64);
     
-    // Create a simple deterministic seed from the mnemonic
-    // Not cryptographically ideal but works for demo purposes
     const encoder = new TextEncoder();
     const mnemonicBytes = encoder.encode(mnemonic);
     
-    // Simple seed derivation (for demo - in production, use proper HD wallet derivation)
     for (let i = 0; i < mnemonicBytes.length && i < seed.length; i++) {
       seed[i] = mnemonicBytes[i];
     }
     
-    // For improved entropy, mix with a hash
     const hash = CryptoJS.SHA256(mnemonic);
     const hashHex = hash.toString(CryptoJS.enc.Hex);
     const hashBytes = hexToBytes(hashHex);
     
-    // Mix the hash bytes into the seed
     for (let i = 0; i < hashBytes.length && i < seed.length; i++) {
-      seed[i] = seed[i] ^ hashBytes[i]; // XOR operation for mixing
+      seed[i] = seed[i] ^ hashBytes[i];
     }
     
     try {
-      // Try using derivePath from ed25519-hd-key
       const seedHex = bytesToHex(seed);
       const derived = derivePath("m/44'/501'/0'/0'", seedHex);
       
@@ -190,7 +180,6 @@ const getKeypairFromMnemonic = (mnemonic: string): Keypair => {
     } catch (error) {
       console.error('Error using derivePath, falling back to direct seed:', error);
       
-      // Fallback to direct seed conversion if derivePath fails
       return Keypair.fromSeed(seed.slice(0, 32));
     }
   } catch (error) {
@@ -207,6 +196,11 @@ const useWalletStore = create<WalletState>((set, get) => ({
   isWalletInitialized: false,
   network: 'devnet',
   connection: new Connection(clusterApiUrl('devnet'), 'confirmed'),
+  
+  gasAccountPublicKey: null,
+  gasAccountKeypair: null,
+  isGasAccountEnabled: false,
+  gasAccountBalance: 0,
   
   seedPhraseBackedUp: false,
   showSeedPhrase: false,
@@ -233,7 +227,6 @@ const useWalletStore = create<WalletState>((set, get) => ({
     try {
       console.log('Starting wallet creation process...');
       
-      // Try the main mnemonic generation first
       let mnemonic;
       try {
         mnemonic = generateMnemonic();
@@ -256,7 +249,7 @@ const useWalletStore = create<WalletState>((set, get) => ({
         publicKey,
         keypair,
         isWalletInitialized: true,
-        currentView: 'backup', // Changed to directly go to backup view
+        currentView: 'backup',
         seedPhraseBackedUp: false,
         isLoading: false
       });
@@ -367,15 +360,32 @@ const useWalletStore = create<WalletState>((set, get) => ({
   },
   
   fetchSolBalance: async () => {
-    const { connection, publicKey } = get();
+    const { connection, publicKey, gasAccountPublicKey } = get();
     
     if (!publicKey) return;
     
     try {
       const balance = await connection.getBalance(new PublicKey(publicKey));
       set({ solBalance: balance / LAMPORTS_PER_SOL });
+      
+      if (gasAccountPublicKey) {
+        await get().fetchGasAccountBalance();
+      }
     } catch (error) {
       console.error('Error fetching SOL balance:', error);
+    }
+  },
+  
+  fetchGasAccountBalance: async () => {
+    const { connection, gasAccountPublicKey } = get();
+    
+    if (!gasAccountPublicKey) return;
+    
+    try {
+      const balance = await connection.getBalance(new PublicKey(gasAccountPublicKey));
+      set({ gasAccountBalance: balance / LAMPORTS_PER_SOL });
+    } catch (error) {
+      console.error('Error fetching gas account SOL balance:', error);
     }
   },
   
@@ -425,8 +435,8 @@ const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
   
-  sendTransaction: async (recipient, amount, memo) => {
-    const { connection, publicKey, keypair, network } = get();
+  sendTransaction: async (recipient, amount, memo, useGasAccount = false) => {
+    const { connection, publicKey, keypair, network, gasAccountKeypair, isGasAccountEnabled } = get();
     
     if (!publicKey || !keypair) {
       throw new Error('Wallet not initialized');
@@ -448,7 +458,18 @@ const useWalletStore = create<WalletState>((set, get) => ({
         // This would require memo program, simplified for now
       }
       
-      const signature = await connection.sendTransaction(transaction, [keypair]);
+      const useGasPayer = useGasAccount && isGasAccountEnabled && gasAccountKeypair;
+      
+      let signature;
+      if (useGasPayer && gasAccountKeypair) {
+        transaction.feePayer = gasAccountKeypair.publicKey;
+        
+        transaction.sign(keypair, gasAccountKeypair);
+        
+        signature = await connection.sendRawTransaction(transaction.serialize());
+      } else {
+        signature = await connection.sendTransaction(transaction, [keypair]);
+      }
       
       const confirmation = await connection.confirmTransaction(signature);
       
@@ -463,7 +484,8 @@ const useWalletStore = create<WalletState>((set, get) => ({
         type: 'send' as const,
         to: recipient,
         from: publicKey,
-        status: 'confirmed' as const
+        status: 'confirmed' as const,
+        gasAccount: useGasPayer ? gasAccountKeypair?.publicKey.toBase58() : undefined
       };
       
       set(state => ({
@@ -506,6 +528,42 @@ const useWalletStore = create<WalletState>((set, get) => ({
       : `https://solscan.io/${network}`;
       
     return `${baseUrl}/tx/${signature}`;
+  },
+  
+  importGasAccount: async (mnemonic, password) => {
+    set({ isLoading: true, error: null });
+    try {
+      if (!validateMnemonic(mnemonic)) {
+        throw new Error('Invalid mnemonic phrase');
+      }
+      
+      const encryptedGasMnemonic = CryptoJS.AES.encrypt(mnemonic, password).toString();
+      
+      const gasKeypair = getKeypairFromMnemonic(mnemonic);
+      const gasPublicKey = gasKeypair.publicKey.toBase58();
+      
+      set({
+        gasAccountPublicKey: gasPublicKey,
+        gasAccountKeypair: gasKeypair,
+        isGasAccountEnabled: true,
+        isLoading: false
+      });
+      
+      localStorage.setItem('soloasisGasAccount', encryptedGasMnemonic);
+      
+      await get().fetchGasAccountBalance();
+    } catch (error) {
+      console.error('Error importing gas account:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to import gas account', 
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+  
+  toggleGasAccount: (enabled) => {
+    set({ isGasAccountEnabled: enabled });
   }
 }));
 

@@ -5,17 +5,27 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
-import { ArrowRight, ExternalLink } from 'lucide-react';
+import { ArrowRight, ExternalLink, Wallet } from 'lucide-react';
 import useWalletStore from '@/store/walletStore';
 
 const SendView: React.FC = () => {
-  const { solBalance, network, sendTransaction, getExplorerUrl } = useWalletStore();
+  const { 
+    solBalance, 
+    network, 
+    sendTransaction, 
+    getExplorerUrl, 
+    gasAccountPublicKey, 
+    gasAccountBalance,
+    isGasAccountEnabled
+  } = useWalletStore();
   const { toast } = useToast();
   
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [memo, setMemo] = useState('');
+  const [useGasAccount, setUseGasAccount] = useState(isGasAccountEnabled);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [txSignature, setTxSignature] = useState<string | null>(null);
@@ -39,11 +49,17 @@ const SendView: React.FC = () => {
       return;
     }
     
+    // Check if gas account has enough balance
+    if (useGasAccount && gasAccountBalance < 0.00001) {
+      setError('Gas account has insufficient balance for network fee');
+      return;
+    }
+    
     setIsLoading(true);
     
     try {
-      // Send a real transaction to the blockchain
-      const signature = await sendTransaction(recipient, parseFloat(amount), memo || undefined);
+      // Send a real transaction to the blockchain using gas account if enabled
+      const signature = await sendTransaction(recipient, parseFloat(amount), memo || undefined, useGasAccount);
       
       setTxSignature(signature);
       
@@ -145,6 +161,25 @@ const SendView: React.FC = () => {
               onChange={(e) => setMemo(e.target.value)}
             />
           </div>
+          
+          {gasAccountPublicKey && (
+            <div className="flex items-center space-x-2 pt-2">
+              <Switch
+                id="use-gas-account"
+                checked={useGasAccount}
+                onCheckedChange={setUseGasAccount}
+              />
+              <div className="space-y-0.5">
+                <Label htmlFor="use-gas-account" className="flex items-center">
+                  <Wallet className="h-4 w-4 mr-1" />
+                  Use gas account for fee
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Gas account balance: {gasAccountBalance.toFixed(5)} SOL
+                </p>
+              </div>
+            </div>
+          )}
           
           <div className="text-sm text-muted-foreground pt-2">
             <p>Network Fee: ~0.000005 SOL</p>

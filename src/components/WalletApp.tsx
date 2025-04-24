@@ -10,6 +10,7 @@ import SendView from './SendView';
 import ReceiveView from './ReceiveView';
 import SettingsView from './SettingsView';
 import TransactionsView from './TransactionsView';
+import GasAccountView from './GasAccountView';
 import useWalletStore from '@/store/walletStore';
 
 const WalletApp: React.FC = () => {
@@ -55,6 +56,8 @@ const WalletApp: React.FC = () => {
         return <SettingsView />;
       case 'transactions':
         return <TransactionsView />;
+      case 'gas-account':
+        return <GasAccountView />;
       default:
         return <Dashboard />;
     }
