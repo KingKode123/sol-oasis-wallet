@@ -432,32 +432,54 @@ const useWalletStore = create<WalletState>((set, get) => ({
             
             const userPubkeyStr = pubKey.toString();
             
-            const isUserSender = tx.transaction.message.accountKeys[0].toString() === userPubkeyStr;
+            const accounts = tx.transaction.message.accountKeys;
             
-            const type = isUserSender ? 'send' : 'receive';
+            const userAccountIndex = accounts.findIndex(key => 
+              key.toString() === userPubkeyStr
+            );
             
-            const userAccountIndex = tx.transaction.message.accountKeys
-              .findIndex(key => key.toString() === userPubkeyStr);
+            if (userAccountIndex === -1) return null; // Skip if user account not found
+            
+            const userPreBalance = tx.meta.preBalances[userAccountIndex];
+            const userPostBalance = tx.meta.postBalances[userAccountIndex];
+            
+            const balanceDecreased = userPreBalance > userPostBalance;
+            
+            const recipientAccountIndex = accounts.findIndex((key, index) => 
+              index !== userAccountIndex && 
+              tx.meta?.preBalances[index] < tx.meta?.postBalances[index]
+            );
+            
+            const isSendTransaction = balanceDecreased && recipientAccountIndex !== -1;
             
             let amount = 0;
-            if (userAccountIndex >= 0 && tx.meta.postBalances && tx.meta.preBalances) {
-              amount = Math.abs(tx.meta.postBalances[userAccountIndex] - tx.meta.preBalances[userAccountIndex]) / LAMPORTS_PER_SOL;
+            let from = '';
+            let to = '';
+            
+            if (isSendTransaction) {
+              amount = (tx.meta.postBalances[recipientAccountIndex] - tx.meta.preBalances[recipientAccountIndex]) / LAMPORTS_PER_SOL;
+              from = userPubkeyStr;
+              to = accounts[recipientAccountIndex].toString();
+            } else {
+              amount = (userPostBalance - userPreBalance) / LAMPORTS_PER_SOL;
+              
+              const senderIndex = accounts.findIndex((key, index) => 
+                index !== userAccountIndex && tx.meta?.preBalances[index] > tx.meta?.postBalances[index]
+              );
+              
+              from = senderIndex !== -1 ? accounts[senderIndex].toString() : accounts[0].toString();
+              to = userPubkeyStr;
             }
             
-            let otherParty = '';
-            if (isUserSender && tx.transaction.message.accountKeys.length > 1) {
-              otherParty = tx.transaction.message.accountKeys[1].toString();
-            } else if (!isUserSender) {
-              otherParty = tx.transaction.message.accountKeys[0].toString();
-            }
+            if (amount < 0) amount = Math.abs(amount);
             
             return {
               signature: sig.signature,
               timestamp: tx.blockTime ? tx.blockTime * 1000 : Date.now(),
               amount,
-              type,
-              to: isUserSender ? otherParty : userPubkeyStr,
-              from: isUserSender ? userPubkeyStr : otherParty,
+              type: isSendTransaction ? 'send' : 'receive',
+              to,
+              from,
               status: 'confirmed',
             };
           } catch (error) {
