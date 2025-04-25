@@ -430,17 +430,34 @@ const useWalletStore = create<WalletState>((set, get) => ({
             
             if (!tx || !tx.meta) return null;
             
-            const isReceiver = tx.transaction.message.accountKeys[0].toString() !== pubKey.toString();
+            const userPubkeyStr = pubKey.toString();
             
-            const amount = Math.abs(tx.meta.postBalances[0] - tx.meta.preBalances[0]) / LAMPORTS_PER_SOL;
+            const isUserSender = tx.transaction.message.accountKeys[0].toString() === userPubkeyStr;
+            
+            const type = isUserSender ? 'send' : 'receive';
+            
+            const userAccountIndex = tx.transaction.message.accountKeys
+              .findIndex(key => key.toString() === userPubkeyStr);
+            
+            let amount = 0;
+            if (userAccountIndex >= 0 && tx.meta.postBalances && tx.meta.preBalances) {
+              amount = Math.abs(tx.meta.postBalances[userAccountIndex] - tx.meta.preBalances[userAccountIndex]) / LAMPORTS_PER_SOL;
+            }
+            
+            let otherParty = '';
+            if (isUserSender && tx.transaction.message.accountKeys.length > 1) {
+              otherParty = tx.transaction.message.accountKeys[1].toString();
+            } else if (!isUserSender) {
+              otherParty = tx.transaction.message.accountKeys[0].toString();
+            }
             
             return {
               signature: sig.signature,
               timestamp: tx.blockTime ? tx.blockTime * 1000 : Date.now(),
               amount,
-              type: isReceiver ? 'receive' : 'send',
-              to: isReceiver ? pubKey.toString() : tx.transaction.message.accountKeys[1]?.toString(),
-              from: isReceiver ? tx.transaction.message.accountKeys[0]?.toString() : pubKey.toString(),
+              type,
+              to: isUserSender ? otherParty : userPubkeyStr,
+              from: isUserSender ? userPubkeyStr : otherParty,
               status: 'confirmed',
             };
           } catch (error) {
