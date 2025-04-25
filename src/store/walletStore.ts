@@ -52,11 +52,13 @@ export interface WalletState {
     token?: string;
     status?: 'confirmed' | 'processing' | 'failed';
     gasAccount?: string;
+    dApp?: string;
   }>;
   isLoadingTransactions: boolean;
   
   isLoading: boolean;
-  currentView: 'welcome' | 'create' | 'import' | 'dashboard' | 'send' | 'receive' | 'settings' | 'transactions' | 'backup' | 'gas-account';
+  currentView: 'welcome' | 'create' | 'import' | 'dashboard' | 'send' | 'receive' | 
+               'settings' | 'transactions' | 'backup' | 'gas-account' | 'dapp-connections';
   error: string | null;
   
   setNetwork: (network: NetworkType) => void;
@@ -66,7 +68,9 @@ export interface WalletState {
   signOut: () => void;
   fetchSolBalance: () => Promise<void>;
   fetchTransactionHistory: () => Promise<void>;
-  sendTransaction: (recipient: string, amount: number, memo?: string, useGasAccount?: boolean) => Promise<string>;
+  sendTransaction: (recipient: string, amount: number, memo?: string, useGasAccount?: boolean, dApp?: string) => Promise<string>;
+  signTransaction: (transaction: Transaction) => Promise<Transaction>;
+  signMessage: (message: Uint8Array) => Promise<Uint8Array>;
   refreshWallet: () => Promise<void>;
   setCurrentView: (view: WalletState['currentView']) => void;
   setSeedPhraseBackedUp: (value: boolean) => void;
@@ -453,7 +457,7 @@ const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
   
-  sendTransaction: async (recipient, amount, memo, useGasAccount = false) => {
+  sendTransaction: async (recipient, amount, memo, useGasAccount = false, dApp) => {
     const { connection, publicKey, keypair, network, gasAccountKeypair, isGasAccountEnabled } = get();
     
     if (!publicKey || !keypair) {
@@ -510,7 +514,8 @@ const useWalletStore = create<WalletState>((set, get) => ({
         to: recipient,
         from: publicKey,
         status: 'confirmed' as const,
-        gasAccount: useGasPayer ? gasAccountKeypair?.publicKey.toBase58() : undefined
+        gasAccount: useGasPayer ? gasAccountKeypair?.publicKey.toBase58() : undefined,
+        dApp: dApp
       };
       
       set(state => ({
@@ -527,6 +532,27 @@ const useWalletStore = create<WalletState>((set, get) => ({
       }
       throw error;
     }
+  },
+  
+  signTransaction: async (transaction: Transaction) => {
+    const { keypair } = get();
+    
+    if (!keypair) {
+      throw new Error('Wallet not initialized');
+    }
+    
+    transaction.partialSign(keypair);
+    return transaction;
+  },
+  
+  signMessage: async (message: Uint8Array) => {
+    const { keypair } = get();
+    
+    if (!keypair) {
+      throw new Error('Wallet not initialized');
+    }
+    
+    return keypair.sign(message);
   },
   
   refreshWallet: async () => {

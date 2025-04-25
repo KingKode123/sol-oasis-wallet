@@ -11,10 +11,27 @@ import ReceiveView from './ReceiveView';
 import SettingsView from './SettingsView';
 import TransactionsView from './TransactionsView';
 import GasAccountView from './GasAccountView';
+import ConnectionRequestView from './ConnectionRequestView';
+import TransactionRequestView from './TransactionRequestView';
+import MessageSignRequestView from './MessageSignRequestView';
+import DAppConnectionsView from './DAppConnectionsView';
 import useWalletStore from '@/store/walletStore';
+import useDAppStore from '@/store/dAppStore';
 
 const WalletApp: React.FC = () => {
-  const { currentView, isWalletInitialized, seedPhraseBackedUp, publicKey } = useWalletStore();
+  const { 
+    currentView, 
+    isWalletInitialized, 
+    seedPhraseBackedUp, 
+    publicKey, 
+    setCurrentView 
+  } = useWalletStore();
+  
+  const { 
+    currentConnectionRequest, 
+    currentTransactionRequest, 
+    currentMessageSignRequest 
+  } = useDAppStore();
   
   // Check for existing wallet on load, but don't set isWalletInitialized yet
   // We will require proper unlocking first
@@ -32,7 +49,33 @@ const WalletApp: React.FC = () => {
   // Determine if the wallet is fully set up - requires publicKey to be present
   const walletFullyInitialized = Boolean(isWalletInitialized && publicKey);
   
+  // Handle pending dApp requests
+  const hasPendingDAppRequest = currentConnectionRequest || 
+                               currentTransactionRequest || 
+                               currentMessageSignRequest;
+  
+  const renderDAppRequest = () => {
+    if (currentConnectionRequest) {
+      return <ConnectionRequestView request={currentConnectionRequest} />;
+    }
+    
+    if (currentTransactionRequest) {
+      return <TransactionRequestView request={currentTransactionRequest} />;
+    }
+    
+    if (currentMessageSignRequest) {
+      return <MessageSignRequestView request={currentMessageSignRequest} />;
+    }
+    
+    return null;
+  };
+  
   const renderContent = () => {
+    // Show dApp requests with highest priority if they exist
+    if (hasPendingDAppRequest) {
+      return renderDAppRequest();
+    }
+    
     if (isWalletInitialized && !seedPhraseBackedUp && currentView === 'backup') {
       return <BackupView />;
     }
@@ -58,13 +101,15 @@ const WalletApp: React.FC = () => {
         return <TransactionsView />;
       case 'gas-account':
         return <GasAccountView />;
+      case 'dapp-connections':
+        return <DAppConnectionsView />;
       default:
         return <Dashboard />;
     }
   };
   
   return (
-    <WalletLayout showNavigation={walletFullyInitialized}>
+    <WalletLayout showNavigation={walletFullyInitialized && !hasPendingDAppRequest}>
       {renderContent()}
     </WalletLayout>
   );
