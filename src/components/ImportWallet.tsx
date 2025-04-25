@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -56,7 +55,7 @@ const ImportWallet: React.FC = () => {
       if (activeTab === 'mnemonic') {
         await importWallet(mnemonic.trim(), password);
       } else {
-        await importWallet(privateKey.trim(), password, true); // true flag indicates private key import
+        await importWallet(privateKey.trim(), password);
       }
       
       toast({
