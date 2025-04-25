@@ -7,6 +7,7 @@ import {
 } from '@solana/web3.js';
 import useWalletStore from '../store/walletStore';
 import useDAppStore from '../store/dAppStore';
+import { signMessage } from './cryptoUtils';
 
 // Standard interface for wallet adapter
 export interface WalletAdapter {
@@ -199,8 +200,8 @@ export class SolOasisWalletAdapter implements WalletAdapter {
           reject(new Error('Message sign request not found'));
         } else if (request.state === 'approved') {
           clearInterval(checkInterval);
-          // Return the signed message
-          const signedMessage = useWalletStore.getState().keypair!.sign(message);
+          // Return the signed message using our custom signMessage function
+          const signedMessage = signMessage(useWalletStore.getState().keypair!, message);
           resolve(signedMessage);
         } else if (request.state === 'rejected') {
           clearInterval(checkInterval);

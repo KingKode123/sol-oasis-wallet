@@ -11,6 +11,9 @@ export default defineConfig({
       '@': resolve(__dirname, './src'),
     },
   },
+  server: {
+    port: 8080
+  },
   build: {
     outDir: 'dist',
     rollupOptions: {

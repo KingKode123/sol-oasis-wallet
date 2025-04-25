@@ -14,6 +14,7 @@ import CryptoJS from 'crypto-js';
 import * as nacl from 'tweetnacl';
 import { derivePath } from 'ed25519-hd-key';
 import bs58 from 'bs58';
+import { signMessage } from '../utils/cryptoUtils';
 
 export type NetworkType = 'devnet' | 'testnet' | 'mainnet-beta';
 
@@ -552,7 +553,7 @@ const useWalletStore = create<WalletState>((set, get) => ({
       throw new Error('Wallet not initialized');
     }
     
-    return keypair.sign(message);
+    return signMessage(keypair, message);
   },
   
   refreshWallet: async () => {

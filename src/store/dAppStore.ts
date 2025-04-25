@@ -1,7 +1,7 @@
-
 import { create } from 'zustand';
 import { Transaction, VersionedTransaction } from '@solana/web3.js';
 import useWalletStore from './walletStore';
+import { signMessage } from '../utils/cryptoUtils';
 
 export type ConnectionRequest = {
   id: string;
@@ -278,8 +278,8 @@ const useDAppStore = create<DAppState>((set, get) => ({
     if (!keypair) throw new Error('Wallet not unlocked');
     
     try {
-      // Sign the message
-      const signedMessage = keypair.sign(request.message);
+      // Sign the message using our cryptoUtils
+      const signedMessage = signMessage(keypair, request.message);
       
       set(state => ({
         messageSignRequests: state.messageSignRequests.map(r => 

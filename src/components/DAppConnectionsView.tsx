@@ -93,7 +93,6 @@ const DAppConnectionsView: React.FC = () => {
                     <div className="flex items-center space-x-2">
                       <Switch 
                         id={`auto-approve-${index}`}
-                        size="sm"
                         checked={site.permissions.autoApprove}
                         onCheckedChange={(checked) => handleToggleAutoApprove(site.origin, checked)}
                       />
