@@ -27,8 +27,8 @@ window.addEventListener('message', async (event) => {
   const { data } = event;
   
   try {
-    // Make sure message is an object before spreading
-    const messageData = typeof data.message === 'object' && data.message !== null 
+    // Ensure message is an object, defaulting to an empty object if not
+    const messageData = data.message && typeof data.message === 'object' 
       ? data.message 
       : {};
       
@@ -64,3 +64,4 @@ window.addEventListener('message', async (event) => {
     }, '*');
   }
 });
+
