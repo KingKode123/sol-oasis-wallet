@@ -7,8 +7,18 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
-import { ArrowRight, ExternalLink, Wallet } from 'lucide-react';
+import { ArrowRight, ExternalLink, Wallet, DollarSign, Info } from 'lucide-react';
 import useWalletStore from '@/store/walletStore';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const SendView: React.FC = () => {
   const { 
@@ -29,36 +39,48 @@ const SendView: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [txSignature, setTxSignature] = useState<string | null>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   
-  const handleSend = async () => {
-    setError('');
-    setTxSignature(null);
-    
+  const ESTIMATED_FEE = 0.000005; // Solana's typical transaction fee in SOL
+  
+  const validateTransaction = () => {
     if (!recipient) {
       setError('Recipient address is required');
-      return;
+      return false;
     }
     
     if (!amount || parseFloat(amount) <= 0) {
       setError('Amount must be greater than 0');
-      return;
+      return false;
     }
     
     if (parseFloat(amount) > solBalance) {
       setError('Insufficient balance');
-      return;
+      return false;
     }
     
-    // Check if gas account has enough balance
-    if (useGasAccount && gasAccountBalance < 0.00001) {
+    if (useGasAccount && gasAccountBalance < ESTIMATED_FEE) {
       setError('Gas account has insufficient balance for network fee');
-      return;
+      return false;
     }
     
+    return true;
+  };
+
+  const handleInitiateSend = () => {
+    setError('');
+    if (validateTransaction()) {
+      setShowConfirmDialog(true);
+    }
+  };
+  
+  const handleConfirmSend = async () => {
+    setShowConfirmDialog(false);
+    setError('');
+    setTxSignature(null);
     setIsLoading(true);
     
     try {
-      // Send a real transaction to the blockchain using gas account if enabled
       const signature = await sendTransaction(recipient, parseFloat(amount), memo || undefined, useGasAccount);
       
       setTxSignature(signature);
@@ -91,6 +113,12 @@ const SendView: React.FC = () => {
       const url = getExplorerUrl(txSignature);
       window.open(url, '_blank');
     }
+  };
+  
+  const getTotalAmount = () => {
+    const amountNum = parseFloat(amount) || 0;
+    const fee = useGasAccount ? 0 : ESTIMATED_FEE;
+    return (amountNum + fee).toFixed(6);
   };
   
   return (
@@ -182,7 +210,7 @@ const SendView: React.FC = () => {
           )}
           
           <div className="text-sm text-muted-foreground pt-2">
-            <p>Network Fee: ~0.000005 SOL</p>
+            <p>Network Fee: ~{ESTIMATED_FEE} SOL</p>
             <p>Network: {network === 'mainnet-beta' ? 'Mainnet' : 
                           network === 'testnet' ? 'Testnet' : 'Devnet'}</p>
           </div>
@@ -190,7 +218,7 @@ const SendView: React.FC = () => {
         
         <CardFooter className="flex justify-end">
           <Button 
-            onClick={handleSend}
+            onClick={handleInitiateSend}
             disabled={isLoading}
             className="flex items-center"
           >
@@ -203,6 +231,52 @@ const SendView: React.FC = () => {
           </Button>
         </CardFooter>
       </Card>
+
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Info className="h-5 w-5" />
+              Confirm Transaction
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-4">
+              <div className="border rounded-lg p-4 space-y-2 bg-muted/50">
+                <div className="flex justify-between">
+                  <span>Amount:</span>
+                  <span className="font-medium">{amount} SOL</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Network Fee:</span>
+                  <span className="font-medium">
+                    {useGasAccount ? (
+                      <span className="text-green-600">Paid by gas account</span>
+                    ) : (
+                      `${ESTIMATED_FEE} SOL`
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between font-medium">
+                  <span>Total:</span>
+                  <span>{getTotalAmount()} SOL</span>
+                </div>
+                <div className="pt-2 text-sm">
+                  <div><strong>To:</strong> {recipient}</div>
+                  {memo && <div><strong>Memo:</strong> {memo}</div>}
+                  <div><strong>Network:</strong> {network}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <DollarSign className="h-4 w-4" />
+                Please review the transaction details before confirming
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmSend}>Confirm Send</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
