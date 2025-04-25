@@ -27,9 +27,14 @@ window.addEventListener('message', async (event) => {
   const { data } = event;
   
   try {
+    // Make sure message is an object before spreading
+    const messageData = typeof data.message === 'object' && data.message !== null 
+      ? data.message 
+      : {};
+      
     // Add origin information to the message
     const message = {
-      ...data.message,
+      ...messageData,
       origin: window.location.origin,
       title: document.title || window.location.hostname
     };
