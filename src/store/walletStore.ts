@@ -64,7 +64,7 @@ export interface WalletState {
   
   setNetwork: (network: NetworkType) => void;
   createWallet: (password: string) => Promise<void>;
-  importWallet: (mnemonic: string, password: string) => Promise<void>;
+  importWallet: (mnemonicOrPrivateKey: string, password: string) => Promise<void>;
   unlockWallet: (password: string) => Promise<boolean>;
   signOut: () => void;
   fetchSolBalance: () => Promise<void>;
@@ -290,17 +290,33 @@ const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
   
-  importWallet: async (mnemonic, password) => {
+  importWallet: async (mnemonicOrPrivateKey, password) => {
     set({ isLoading: true, error: null });
     try {
-      if (!validateMnemonic(mnemonic)) {
-        throw new Error('Invalid mnemonic phrase');
+      const isValidMnemonic = validateMnemonic(mnemonicOrPrivateKey);
+      const isPotentialPrivateKey = mnemonicOrPrivateKey.length >= 43 && mnemonicOrPrivateKey.length <= 88;
+      
+      let keypair;
+      let mnemonic = null;
+      
+      if (isValidMnemonic) {
+        mnemonic = mnemonicOrPrivateKey;
+        keypair = getKeypairFromMnemonic(mnemonic);
+      } else if (isPotentialPrivateKey) {
+        try {
+          keypair = getKeypairFromPrivateKey(mnemonicOrPrivateKey);
+        } catch (error) {
+          throw new Error('Invalid private key format');
+        }
+      } else {
+        throw new Error('Invalid input: not a valid mnemonic or private key');
       }
       
-      const encryptedMnemonic = CryptoJS.AES.encrypt(mnemonic, password).toString();
-      
-      const keypair = getKeypairFromMnemonic(mnemonic);
       const publicKey = keypair.publicKey.toBase58();
+      
+      const encryptedMnemonic = mnemonic 
+        ? CryptoJS.AES.encrypt(mnemonic, password).toString()
+        : null;
       
       set({
         mnemonic,
@@ -313,7 +329,9 @@ const useWalletStore = create<WalletState>((set, get) => ({
         isLoading: false
       });
       
-      localStorage.setItem('soloasisWallet', encryptedMnemonic);
+      if (encryptedMnemonic) {
+        localStorage.setItem('soloasisWallet', encryptedMnemonic);
+      }
       
       await get().fetchSolBalance();
       await get().fetchTransactionHistory();

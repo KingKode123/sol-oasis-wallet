@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -63,9 +64,16 @@ const ImportWallet: React.FC = () => {
         description: "Your wallet is ready to use.",
       });
     } catch (err) {
+      let errorMessage = error || "An unknown error occurred";
+      
+      // Provide more user-friendly error messages
+      if (activeTab === 'privateKey' && errorMessage.includes('Invalid mnemonic')) {
+        errorMessage = "Invalid private key format";
+      }
+      
       toast({
         title: "Error importing wallet",
-        description: error || "An unknown error occurred",
+        description: errorMessage,
         variant: "destructive"
       });
     }
