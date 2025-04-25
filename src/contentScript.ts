@@ -1,4 +1,5 @@
 
+
 // Communication bridge between dApps and the wallet extension
 console.log('SOL Oasis wallet content script loaded');
 
@@ -42,12 +43,15 @@ window.addEventListener('message', async (event) => {
     // Forward to background script
     const response = await chrome.runtime.sendMessage(message);
     
+    // Create a response object and ensure it's safe to spread
+    const responseObj = response && typeof response === 'object' ? response : {};
+    
     // Send response back to inpage script
     window.postMessage({
       channel: 'soloasis_wallet_background',
       response: {
         id: data.id,
-        ...response
+        ...responseObj
       }
     }, '*');
   } catch (error) {
