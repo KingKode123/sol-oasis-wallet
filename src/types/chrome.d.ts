@@ -1,10 +1,9 @@
-
 // Type definitions for Chrome extension API
 declare namespace chrome {
   export namespace runtime {
     function getURL(path: string): string;
     function sendMessage(message: any, responseCallback?: (response: any) => void): void;
-    function onMessage: {
+    const onMessage: {
       addListener: (
         callback: (
           message: any,
