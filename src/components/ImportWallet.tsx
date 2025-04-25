@@ -21,15 +21,16 @@ const ImportWallet: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showError, setShowError] = useState('');
+  const [activeTab, setActiveTab] = useState<'mnemonic' | 'privateKey'>('mnemonic');
   
-  const handleImport = async (importType: 'mnemonic' | 'privateKey') => {
+  const handleImport = async () => {
     // Validate inputs
-    if (importType === 'mnemonic' && !mnemonic.trim()) {
+    if (activeTab === 'mnemonic' && !mnemonic.trim()) {
       setShowError('Please enter your recovery phrase');
       return;
     }
     
-    if (importType === 'privateKey' && !privateKey.trim()) {
+    if (activeTab === 'privateKey' && !privateKey.trim()) {
       setShowError('Please enter your private key');
       return;
     }
@@ -52,7 +53,7 @@ const ImportWallet: React.FC = () => {
     setShowError('');
     
     try {
-      if (importType === 'mnemonic') {
+      if (activeTab === 'mnemonic') {
         await importWallet(mnemonic.trim(), password);
       } else {
         await importWallet(privateKey.trim(), password, true); // true flag indicates private key import
@@ -79,7 +80,11 @@ const ImportWallet: React.FC = () => {
           <CardDescription>Import using recovery phrase or private key</CardDescription>
         </CardHeader>
         
-        <Tabs defaultValue="mnemonic" className="w-full">
+        <Tabs 
+          defaultValue="mnemonic" 
+          className="w-full"
+          onValueChange={(value) => setActiveTab(value as 'mnemonic' | 'privateKey')}
+        >
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="mnemonic">Recovery Phrase</TabsTrigger>
             <TabsTrigger value="privateKey">Private Key</TabsTrigger>
@@ -161,17 +166,13 @@ const ImportWallet: React.FC = () => {
           </CardContent>
           
           <CardFooter className="flex flex-col space-y-3">
-            <Tabs.Context.Consumer>
-              {(context) => (
-                <Button 
-                  className="w-full" 
-                  onClick={() => handleImport(context?.value as 'mnemonic' | 'privateKey')}
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Importing...' : 'Import Wallet'}
-                </Button>
-              )}
-            </Tabs.Context.Consumer>
+            <Button 
+              className="w-full" 
+              onClick={handleImport}
+              disabled={isLoading}
+            >
+              {isLoading ? 'Importing...' : 'Import Wallet'}
+            </Button>
             
             <Button 
               variant="outline" 
