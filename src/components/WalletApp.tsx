@@ -24,7 +24,9 @@ const WalletApp: React.FC = () => {
     isWalletInitialized, 
     seedPhraseBackedUp, 
     publicKey, 
-    setCurrentView 
+    setCurrentView,
+    encryptedMnemonic,
+    unlockWallet
   } = useWalletStore();
   
   const { 
@@ -33,18 +35,43 @@ const WalletApp: React.FC = () => {
     currentMessageSignRequest 
   } = useDAppStore();
   
-  // Check for existing wallet on load, but don't set isWalletInitialized yet
-  // We will require proper unlocking first
+  // Check for existing wallet on load and attempt auto-unlock if password is in session storage
   useEffect(() => {
-    const encryptedMnemonic = localStorage.getItem('soloasisWallet');
-    if (encryptedMnemonic) {
-      useWalletStore.setState({ 
-        encryptedMnemonic,
-        // We set currentView to welcome to force login, but don't set isWalletInitialized yet
-        currentView: 'welcome'
-      });
-    }
-  }, []);
+    const checkExistingWallet = async () => {
+      const storedEncryptedMnemonic = localStorage.getItem('soloasisWallet');
+      
+      if (storedEncryptedMnemonic) {
+        // Update the encrypted mnemonic in the store
+        useWalletStore.setState({ 
+          encryptedMnemonic: storedEncryptedMnemonic
+        });
+        
+        // Check if we have a saved password in session storage (cleared on browser close)
+        const savedPassword = sessionStorage.getItem('soloasisWalletPassword');
+        if (savedPassword) {
+          try {
+            // Try to unlock the wallet with the saved password
+            const unlocked = await unlockWallet(savedPassword);
+            if (unlocked) {
+              // Successfully unlocked, wallet state is now set in unlockWallet function
+              console.log('Wallet auto-unlocked successfully');
+            } else {
+              // If unlock fails, show welcome screen
+              setCurrentView('welcome');
+            }
+          } catch (error) {
+            console.error('Auto-unlock failed:', error);
+            setCurrentView('welcome');
+          }
+        } else {
+          // No saved password, show welcome screen
+          setCurrentView('welcome');
+        }
+      }
+    };
+    
+    checkExistingWallet();
+  }, [unlockWallet, setCurrentView]);
   
   // Determine if the wallet is fully set up - requires publicKey to be present
   const walletFullyInitialized = Boolean(isWalletInitialized && publicKey);
